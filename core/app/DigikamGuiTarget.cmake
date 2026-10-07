@@ -359,6 +359,10 @@ if(HAVE_LLAMACPP)
 
 endif()
 
+# Photos mode (streamlined Qt Quick front-end), optional.
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/photos/PhotosMode.cmake)
+
 # Share the install include directory for the 3rdparty plugins
 target_include_directories(digikamgui INTERFACE "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/digikam>")
 

@@ -1,0 +1,11 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/photos">
+        <file>qml/Main.qml</file>
+        <file>qml/Sidebar.qml</file>
+        <file>qml/PhotoGrid.qml</file>
+        <file>qml/PhotoTile.qml</file>
+        <file>qml/Viewer.qml</file>
+        <file>qml/IconButton.qml</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,155 @@
+/* ============================================================
+ *
+ * This file is a part of digiKam project
+ * https://www.digikam.org
+ *
+ * Description : Photos mode - a streamlined, consumer oriented
+ *               front-end started with "digikam --photos".
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * ============================================================ */
+
+#include "photosmode.h"
+
+// C++ includes
+
+#include <cstring>
+
+// Qt includes
+
+#include <QAction>
+#include <QCommandLineOption>
+#include <QCommandLineParser>
+#include <QDir>
+#include <QFile>
+#include <QKeySequence>
+#include <QMenu>
+#include <QMenuBar>
+#include <QPointer>
+#include <QStandardPaths>
+#include <QTimer>
+
+// KDE includes
+
+#include <kconfig.h>
+#include <klocalizedstring.h>
+
+// Local includes
+
+#include "digikam_debug.h"
+#include "digikamapp.h"
+#include "photoscontainer.h"
+
+namespace Digikam
+{
+
+namespace
+{
+
+bool                      s_enabled = false;
+QPointer<PhotosContainer> s_container;
+
+} // namespace
+
+QString PhotosMode::configFileName()
+{
+    return QLatin1String("digikam-photosrc");
+}
+
+void PhotosMode::preInitialize(int argc, char** argv)
+{
+    for (int i = 1 ; i < argc ; ++i)
+    {
+        if (argv[i] && (std::strcmp(argv[i], "--photos") == 0))
+        {
+            s_enabled = true;
+            break;
+        }
+    }
+
+    if (!s_enabled)
+    {
+        return;
+    }
+
+    // Seed our own configuration from the classic one on first start, so that
+    // both front-ends open the same collections and databases.
+    // Afterwards the two files evolve independently.
+
+    const QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    const QString ownConfig = configDir + QLatin1Char('/') + configFileName();
+    const QString dkConfig  = configDir + QLatin1String("/digikamrc");
+
+    if (!QFile::exists(ownConfig) && QFile::exists(dkConfig))
+    {
+        QDir().mkpath(configDir);
+
+        if (QFile::copy(dkConfig, ownConfig))
+        {
+            QFile::setPermissions(ownConfig, QFile::ReadOwner | QFile::WriteOwner);
+        }
+    }
+
+    KConfig::setMainConfigName(configFileName());
+}
+
+bool PhotosMode::isEnabled()
+{
+    return s_enabled;
+}
+
+void PhotosMode::addCommandLineOptions(QCommandLineParser& parser)
+{
+    parser.addOption(QCommandLineOption(QStringList() << QLatin1String("photos"),
+                                        i18n("Start digiKam with the streamlined Photos interface")));
+}
+
+QWidget* PhotosMode::createCentralWidget(DigikamApp* const app, ItemIconView* const classicView)
+{
+    s_container = new PhotosContainer(app, classicView);
+
+    return s_container;
+}
+
+void PhotosMode::finalizeMainWindow(DigikamApp* const app)
+{
+    if (!s_container)
+    {
+        return;
+    }
+
+    QAction* const toggle = s_container->toggleAction();
+
+    // Keep the shortcut working while the menu bar is hidden.
+
+    app->addAction(toggle);
+
+    // Offer the way back from the classic interface in its View menu.
+
+    const auto menus = app->menuBar()->findChildren<QMenu*>();
+
+    for (QMenu* const menu : menus)
+    {
+        if (menu->objectName() == QLatin1String("view"))
+        {
+            QAction* const first = menu->actions().isEmpty() ? nullptr : menu->actions().constFirst();
+            menu->insertAction(first, toggle);
+            menu->insertSeparator(first);
+            break;
+        }
+    }
+
+    // Window state restoring may show bars again: apply our chrome afterwards.
+
+    QTimer::singleShot(0, s_container, [] ()
+        {
+            if (s_container)
+            {
+                s_container->setPhotosActive(true);
+            }
+        }
+    );
+}
+
+} // namespace Digikam

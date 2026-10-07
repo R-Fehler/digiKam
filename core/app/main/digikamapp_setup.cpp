@@ -25,7 +25,21 @@ void DigikamApp::setupView()
     }
 
     d->view = new ItemIconView(this, d->modelCollection);
-    setCentralWidget(d->view);
+
+#ifdef HAVE_PHOTOSMODE
+
+    if (PhotosMode::isEnabled())
+    {
+        setCentralWidget(PhotosMode::createCentralWidget(this, d->view));
+    }
+    else
+
+#endif
+
+    {
+        setCentralWidget(d->view);
+    }
+
     d->view->applySettings();
 }
 
