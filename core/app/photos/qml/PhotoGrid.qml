@@ -10,7 +10,10 @@ FocusScope {
     signal openPhoto(int index)
 
     readonly property int  gap:          2
-    readonly property real cell:         Math.floor((list.width - (grid.columns - 1) * gap) / grid.columns)
+    // Horizontal pitch of one tile including the seam. Tiles are placed at
+    // rounded multiples of it, so the columns fill the width exactly.
+    readonly property real pitch:        (list.width + gap) / grid.columns
+    readonly property real cell:         pitch - gap
     readonly property int  headerHeight: grid.byMonth ? 52 : 44
 
     // Zoom levels expressed as number of columns, Photos style.
@@ -86,7 +89,9 @@ FocusScope {
         target: library
 
         function onAboutToReload() {
-            gridRoot.restoreId = gridRoot.scrollToTop ? -1 : library.idAt(gridRoot.topPhotoIndex())
+            // At the top: stay at the top, so newly added (newest) photos show up.
+            gridRoot.restoreId = (gridRoot.scrollToTop || list.atYBeginning) ? -1
+                                                                            : library.idAt(gridRoot.topPhotoIndex())
         }
 
         function onReloaded() {
@@ -153,7 +158,7 @@ FocusScope {
             required property string title
 
             width:  list.width
-            height: (rowType === 0) ? gridRoot.headerHeight : (gridRoot.cell + gridRoot.gap)
+            height: (rowType === 0) ? gridRoot.headerHeight : Math.round(gridRoot.pitch)
 
             Text {
                 visible:              rowItem.rowType === 0
@@ -167,9 +172,8 @@ FocusScope {
                 font.bold:            true
             }
 
-            Row {
+            Item {
                 visible: rowItem.rowType === 1
-                spacing: gridRoot.gap
 
                 Repeater {
                     model: (rowItem.rowType === 1) ? rowItem.count : 0
@@ -177,8 +181,9 @@ FocusScope {
                     delegate: PhotoTile {
                         required property int index
 
-                        width:       gridRoot.cell
-                        height:      gridRoot.cell
+                        x:           Math.round(index * gridRoot.pitch)
+                        width:       Math.round((index + 1) * gridRoot.pitch - gridRoot.gap) - x
+                        height:      Math.round(gridRoot.pitch) - gridRoot.gap
                         photoIndex:  rowItem.first + index
 
                         onActivated: (photoIndex) => gridRoot.openPhoto(photoIndex)
@@ -219,18 +224,16 @@ FocusScope {
         }
     }
 
-    Shortcut {
-        sequences: [StandardKey.ZoomIn, "Ctrl+="]
-        onActivated: gridRoot.zoomStep(-1, list.height / 2)
-    }
-
-    Shortcut {
-        sequences: [StandardKey.ZoomOut]
-        onActivated: gridRoot.zoomStep(+1, list.height / 2)
-    }
-
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Home) {
+        if ((event.key === Qt.Key_Plus) || (event.key === Qt.Key_Equal)) {
+            gridRoot.zoomStep(-1, list.height / 2)
+            event.accepted = true
+        }
+        else if (event.key === Qt.Key_Minus) {
+            gridRoot.zoomStep(+1, list.height / 2)
+            event.accepted = true
+        }
+        else if (event.key === Qt.Key_Home) {
             list.positionViewAtBeginning()
             event.accepted = true
         }

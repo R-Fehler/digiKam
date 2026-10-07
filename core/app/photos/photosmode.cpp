@@ -33,13 +33,16 @@
 // KDE includes
 
 #include <kconfig.h>
+#include <kconfiggroup.h>
 #include <klocalizedstring.h>
+#include <ksharedconfig.h>
 
 // Local includes
 
 #include "digikam_debug.h"
 #include "digikamapp.h"
 #include "photoscontainer.h"
+#include "thumbnailsize.h"
 
 namespace Digikam
 {
@@ -107,6 +110,15 @@ void PhotosMode::addCommandLineOptions(QCommandLineParser& parser)
 
 QWidget* PhotosMode::createCentralWidget(DigikamApp* const app, ItemIconView* const classicView)
 {
+    // Square, centre-cropped tiles need thumbnails whose short side covers the
+    // tile: use digiKam's large (512 px) thumbnails. Stored in our own config
+    // only; stock digiKam reads larger stored thumbnails fine (it scales down).
+
+    ThumbnailSize::setUseLargeThumbs(true);
+
+    KConfigGroup group = KSharedConfig::openConfig()->group(QLatin1String("Album Settings"));
+    ThumbnailSize::saveSettings(group, true);
+
     s_container = new PhotosContainer(app, classicView);
 
     return s_container;

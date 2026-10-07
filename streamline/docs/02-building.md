@@ -25,7 +25,7 @@ About Exiv2: digiKam's CMake says 0.27.1 is enough, but the 0.27 code path in
 this snapshot no longer compiles (`MetaEngineData::Private::size()` uses
 0.28-only API). Use Exiv2 0.28.
 
-## Ubuntu 24.04 (tested in CI-like container)
+## Ubuntu 24.04 (tested in a headless container)
 
 ```sh
 # 1. KDE neon user repository: Qt 6.11, KF6 6.30, OpenCV 4.10 (prebuilt).

@@ -466,7 +466,18 @@ MAIN_EXPORT int MAIN_FN(int argc, char** argv)
     digikam->restoreSession();
     digikam->show();
 
-    if (system.enableAIAutoTools || system.enableFaceEngine || system.enableAesthetic || system.enableAutoTags)
+    bool askForModelFiles = (system.enableAIAutoTools || system.enableFaceEngine ||
+                             system.enableAesthetic   || system.enableAutoTags);
+
+#ifdef HAVE_PHOTOSMODE
+
+    // Photos mode does not use the AI features yet: do not interrupt startup.
+
+    askForModelFiles = askForModelFiles && !PhotosMode::isEnabled();
+
+#endif
+
+    if (askForModelFiles)
     {
         QPointer<FilesDownloader> floader = new FilesDownloader(digikam);
 

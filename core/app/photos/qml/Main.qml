@@ -62,7 +62,8 @@ Rectangle {
                     Text {
                         text:           library.loading && (library.count === 0)
                                         ? qsTr("Loading…")
-                                        : qsTr("%L1 items").arg(library.count)
+                                        : ((library.count === 1) ? qsTr("1 item")
+                                                                 : qsTr("%L1 items").arg(library.count))
                         color:          palette.windowText
                         opacity:        0.6
                         font.pixelSize: 12

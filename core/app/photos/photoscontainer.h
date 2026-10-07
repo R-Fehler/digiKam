@@ -54,6 +54,10 @@ Q_SIGNALS:
 
     void signalPhotosActiveChanged();
 
+protected:
+
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private Q_SLOTS:
 
     void slotToggle();

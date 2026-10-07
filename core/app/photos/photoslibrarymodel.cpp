@@ -447,7 +447,7 @@ QString PhotosLibraryModel::dateTextAt(int row) const
     const QLocale locale;
 
     return locale.toString(dt.date(), QLocale::LongFormat) +
-           QLatin1String(" · ")                       +
+           QLatin1String(" ") + QChar(0x00B7) + QLatin1String(" ") +
            locale.toString(dt.time(), QLocale::ShortFormat);
 }
 

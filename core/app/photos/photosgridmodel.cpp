@@ -159,6 +159,7 @@ void PhotosGridModel::setColumns(int columns)
 
     KConfigGroup group = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
     group.writeEntry(QLatin1String("Columns"), m_columns);
+    group.sync();
 
     Q_EMIT columnsChanged();
 }

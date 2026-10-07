@@ -52,8 +52,9 @@ PhotosThumbnailBroker::PhotosThumbnailBroker(QObject* const parent)
     connect(m_thread, &ThumbnailLoadThread::signalQImageThumbnailLoaded,
             this, &PhotosThumbnailBroker::slotImageLoaded);
 
-    connect(m_thread, &ThumbnailLoadThread::signalThumbnailLoaded,
-            this, &PhotosThumbnailBroker::slotPixmapLoaded);
+    // Not connected to signalThumbnailLoaded(QPixmap): pixmaps coming from the
+    // shared cache of the classic views carry a painted 1 px border. A cache hit
+    // there also schedules a load, which delivers the clean QImage above.
 }
 
 PhotosThumbnailBroker::~PhotosThumbnailBroker()
@@ -103,16 +104,6 @@ void PhotosThumbnailBroker::store(const QString& filePath, const QImage& image)
 
 void PhotosThumbnailBroker::slotImageLoaded(const LoadingDescription& description, const QImage& image)
 {
-    store(description.filePath, image);
-
-    Q_EMIT signalThumbnailReady(description.filePath, image);
-}
-
-void PhotosThumbnailBroker::slotPixmapLoaded(const LoadingDescription& description, const QPixmap& pixmap)
-{
-    // Only emitted when another digiKam view already had this thumbnail in its pixmap cache.
-
-    const QImage image = pixmap.toImage();
     store(description.filePath, image);
 
     Q_EMIT signalThumbnailReady(description.filePath, image);

@@ -58,7 +58,6 @@ Q_SIGNALS:
 private Q_SLOTS:
 
     void slotImageLoaded(const LoadingDescription& description, const QImage& image);
-    void slotPixmapLoaded(const LoadingDescription& description, const QPixmap& pixmap);
 
 private:
 

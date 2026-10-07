@@ -20,10 +20,16 @@ shift
 
 STAGE="${BUILD_DIR}/streamline-stage"
 
-# Runtime data looked up through XDG data dirs (database schema definition).
+# Runtime data (database schema, AI model list, icons...) is looked up through
+# the XDG data dirs: install only the data directory into a staging area.
 
-mkdir -p "${STAGE}/share/digikam/database"
-ln -sf "${BUILD_DIR}/core/data/database/dbconfig.xml" "${STAGE}/share/digikam/database/dbconfig.xml"
+if [ ! -f "${STAGE}/.data-installed" ] || [ "${BUILD_DIR}/core/data/cmake_install.cmake" -nt "${STAGE}/.data-installed" ] ; then
+    DESTDIR="${STAGE}/root" cmake -P "${BUILD_DIR}/core/data/cmake_install.cmake" > /dev/null
+    touch "${STAGE}/.data-installed"
+fi
+
+DATA_DIR="$(dirname "$(find "${STAGE}/root" -type d -path "*/share/digikam" | head -n1)")"
+ln -sfn "${BUILD_DIR}/core/data/database/dbconfig.xml" "${DATA_DIR}/digikam/database/dbconfig.xml"
 
 # Plugins are searched recursively below DK_PLUGIN_PATH.
 
@@ -35,7 +41,7 @@ while read -r plugin ; do
     ln -sf "${plugin}" "${STAGE}/plugins/$(basename "${plugin}")"
 done
 
-export XDG_DATA_DIRS="${STAGE}/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export XDG_DATA_DIRS="${DATA_DIR}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export DK_PLUGIN_PATH="${STAGE}/plugins"
 
 DIGIKAM_BIN="$(find "${BUILD_DIR}" -path "${STAGE}" -prune -o -type f -name digikam -perm -u+x -print | head -n1)"

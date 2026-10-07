@@ -15,7 +15,9 @@
 // Qt includes
 
 #include <QAction>
+#include <QEvent>
 #include <QFileInfo>
+#include <QKeyEvent>
 #include <QMenuBar>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -57,6 +59,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_quick->setResizeMode(QQuickWidget::SizeRootObjectToView);
     m_quick->setClearColor(palette().color(QPalette::Window));
     m_quick->setFocusPolicy(Qt::StrongFocus);
+    m_quick->installEventFilter(this);
 
     QQmlEngine* const engine = m_quick->engine();
 
@@ -140,6 +143,30 @@ void PhotosContainer::applyChrome(bool photos)
     {
         bar->setVisible(!photos);
     }
+}
+
+bool PhotosContainer::eventFilter(QObject* watched, QEvent* event)
+{
+    if ((watched == m_quick) && (event->type() == QEvent::ShortcutOverride))
+    {
+        // The classic main window binds plain keys (Escape, arrows, +/-...) and
+        // Ctrl +/- to its own actions. While the Photos UI has the focus, let
+        // these keys reach the Qt Quick scene instead of triggering those actions.
+
+        QKeyEvent* const keyEvent         = static_cast<QKeyEvent*>(event);
+        const Qt::KeyboardModifiers mods  = keyEvent->modifiers() & ~(Qt::KeypadModifier | Qt::ShiftModifier);
+        const int key                     = keyEvent->key();
+        const bool zoomKey                = (key == Qt::Key_Plus) || (key == Qt::Key_Equal) || (key == Qt::Key_Minus);
+
+        if ((mods == Qt::NoModifier) || ((mods == Qt::ControlModifier) && zoomKey))
+        {
+            event->accept();
+
+            return true;
+        }
+    }
+
+    return QStackedWidget::eventFilter(watched, event);
 }
 
 void PhotosContainer::slotToggle()
