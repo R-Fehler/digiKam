@@ -63,6 +63,11 @@ FocusScope {
         zoomAnimation.restart()
     }
 
+    // Converts a position in the list content item to a y in the visible view.
+    function viewY(contentPosition) {
+        return list.mapFromItem(list.contentItem, contentPosition.x, contentPosition.y).y
+    }
+
     function ensureVisible(photoIndex) {
         const row = grid.rowForPhoto(photoIndex)
         if (row >= 0)
@@ -183,12 +188,14 @@ FocusScope {
         }
 
         // Ctrl + wheel (or pinch on touchpads) changes the tile size.
+        // Handlers declared in a Flickable live in its content item: their
+        // positions are content coordinates, see viewY().
 
         WheelHandler {
             acceptedModifiers: Qt.ControlModifier
             onWheel: (event) => {
                 if (event.angleDelta.y !== 0)
-                    gridRoot.zoomStep(event.angleDelta.y > 0 ? -1 : +1, point.position.y)
+                    gridRoot.zoomStep(event.angleDelta.y > 0 ? -1 : +1, gridRoot.viewY(point.position))
             }
         }
 
@@ -201,11 +208,11 @@ FocusScope {
                 const ratio = activeScale / gridRoot.pinchBase
 
                 if (ratio > 1.25) {
-                    gridRoot.zoomStep(-1, centroid.position.y)
+                    gridRoot.zoomStep(-1, gridRoot.viewY(centroid.position))
                     gridRoot.pinchBase = activeScale
                 }
                 else if (ratio < 0.8) {
-                    gridRoot.zoomStep(+1, centroid.position.y)
+                    gridRoot.zoomStep(+1, gridRoot.viewY(centroid.position))
                     gridRoot.pinchBase = activeScale
                 }
             }
