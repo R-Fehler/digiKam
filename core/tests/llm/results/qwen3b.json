@@ -1,0 +1,1372 @@
+{
+  "summary": {
+    "model": "qwen2.5-3b-instruct-q4_k_m.gguf",
+    "total": 39,
+    "constraint_accuracy": 0.794,
+    "constraint_correct": 27,
+    "constraint_total": 34,
+    "field_error_counts": {
+      "person": 2,
+      "tag": 3,
+      "orientation": 2,
+      "caption": 1,
+      "keyword": 1
+    },
+    "behavior_handled_by_model": 3,
+    "behavior_total": 5,
+    "latency_median_s": 11.628,
+    "latency_p90_s": 29.232,
+    "latency_max_s": 40.629,
+    "model_load_rss_mb": 3555.6,
+    "peak_rss_mb": 3654.5
+  },
+  "results": [
+    {
+      "id": "rating-exact",
+      "query": "five star photos",
+      "latency_s": 40.629,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"eq\", \"value\": 5 } ] } {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":{\"message\":\"I couldn't find a 'five' in your request. Please refine your search.\",\"choices\":[\"five star photos\",\"five stars photos\",\"five-star photos\"]}} {\"constraints\":[],\"clarification\":{\"message\":\"Your request is unclear. Please refine your search.\",\"choices\":[\"five star photos\",\"five stars photos\",\"five-star photos\"]}} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "eq",
+            "value": 5
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ],
+        "got": [
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "rating-gte",
+      "query": "photos rated at least 3",
+      "latency_s": 21.047,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"gte\", \"value\": 3 } ] } {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a date range. Please refine your request.\", \"choices\": [\"last year\", \"this year\", \"any time\"]}} {\"clarification\": {\"message\": \"It seems you meant to specify a date range. Please refine your request.\", \"choices\": [\"last year\", \"this year\", \"any time\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a date range. Please refine your request.\", \"choices\": [\"last year\", \"this year\", \"any time\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a date range. Please refine your request.\", \"choices\": [\"last year\", \"this year\", \"any time\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a date range. Please refine your request.\", \"choices\": [\"last year\", \"this year\", \"any time\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "gte",
+            "value": 3
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ],
+        "got": [
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "rating-word",
+      "query": "four star pictures",
+      "latency_s": 20.875,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"eq\", \"value\": 4 } ] } {\"constraints\":[]} {\"clarification\": {\"message\": \"I couldn't find a 'four' in your request. Please specify the rating or add more details.\", \"choices\": [\"Specify rating\", \"Add more details\"]}} {\"clarification\": {\"message\": \"Your request is unclear. Please specify the rating or add more details.\", \"choices\": [\"Specify rating\", \"Add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Your request is missing a rating specification. Please specify the rating or add more details.\", \"choices\": [\"Specify rating\", \"Add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Your request is missing a rating specification. Please specify the rating or add more details.\", \"choices\": [\"Specify rating\", \"Add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Your request is missing a rating specification. Please specify the rating or add more details.\", \"choices\": [\"Specify rating\", \"Add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Your request is missing a rating specification. Please specify the",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "eq",
+            "value": 4
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "rating",
+            "eq",
+            "4"
+          ]
+        ],
+        "got": [
+          [
+            "rating",
+            "eq",
+            "4"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "rating-min",
+      "query": "images with a minimum rating of 2",
+      "latency_s": 3.977,
+      "raw_output": "{\"constraints\": [{\"field\": \"rating\", \"op\": \"gte\", \"value\": 2}]} To: {\"constraints\": [{\"field\": \"rating\", \"op\": \"gte\", \"value\": 2}]}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "gte",
+            "value": 2
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "rating",
+            "gte",
+            "2"
+          ]
+        ],
+        "got": [
+          [
+            "rating",
+            "gte",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "pick-flagged",
+      "query": "flagged photos",
+      "latency_s": 21.006,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accepted\" } ] } {\"constraints\":[]} {\"clarification\": {\"message\": \"Did you mean to specify a field or rating?\", \"choices\": [\"Specify a field or rating\", \"I meant flagged photos\"]}} {\"clarification\": {\"message\": \"Please specify a field or rating.\", \"choices\": [\"Specify a field or rating\", \"I meant flagged photos\"]}} {\"clarification\": {\"message\": \"I need more information. Did you mean to specify a field or rating?\", \"choices\": [\"Specify a field or rating\", \"I meant flagged photos\"]}} {\"clarification\": {\"message\": \"Could you please specify a field or rating?\", \"choices\": [\"Specify a field or rating\", \"I meant flagged photos\"]}} {\"clarification\": {\"message\": \"I need more details. Did you mean to specify a field or rating?\", \"choices\": [\"Specify a field or rating\", \"I meant flagged photos\"]}} {\"clarification\": {\"message\": \"Specify a field or rating.\", \"choices\": [\"Specify a field or rating\", \"I meant flagged photos\"]}} {\"clarification\": {\"message\": \"I need more information",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "accepted"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "pick-rejected",
+      "query": "rejected pictures",
+      "latency_s": 21.305,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"rejected\" } ] } {\"constraints\":[]} {\"clarification\": {\"message\": \"I need more specific information. Please specify the criteria for the photos you want to find.\", \"choices\": [\"by date\", \"by rating\", \"by tag\", \"by person\", \"by place\", \"by date range\", \"by picklabel\", \"by color\", \"by orientation\", \"by caption\"]}} {\"clarification\": {\"message\": \"I need more specific information. Please specify the criteria for the photos you want to find.\", \"choices\": [\"by date\", \"by rating\", \"by tag\", \"by person\", \"by place\", \"by date range\", \"by picklabel\", \"by color\", \"by orientation\", \"by caption\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"I need more specific information. Please specify the criteria for the photos you want to find.\", \"choices\": [\"by date\", \"by rating\", \"by tag\", \"by person\", \"by place\", \"by date range\", \"by picklabel\", \"by color\", \"by orientation\", \"by caption\"]}} {\"constraints\":[]}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "rejected"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "rejected"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "rejected"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "pick-pending",
+      "query": "pending photos",
+      "latency_s": 20.691,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"pending\" } ] } {\"constraints\":[]} {\"clarification\": {\"message\": \"Pending photos, please specify a field to narrow down.\", \"choices\": [\"tag\", \"album\", \"person\", \"place\", \"daterange\", \"rating\", \"picklabel\", \"colorlabel\", \"orientation\", \"caption\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Pending photos, please specify a field to narrow down.\", \"choices\": [\"tag\", \"album\", \"person\", \"place\", \"daterange\", \"rating\", \"picklabel\", \"colorlabel\", \"orientation\", \"caption\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Pending photos, please specify a field to narrow down.\", \"choices\": [\"tag\", \"album\", \"person\", \"place\", \"daterange\", \"rating\", \"picklabel\", \"colorlabel\", \"orientation\", \"caption\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"Pending photos, please specify a field to narrow down.\", \"choices\": [\"tag\", \"album\", \"person\", \"place\", \"daterange\", \"rating\", \"picklabel",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "pending"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "pending"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "pending"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "color-red",
+      "query": "photos with a red label",
+      "latency_s": 4.321,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"red\" } ] } {\"constraints\": [{\"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"red\"}]}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "colorlabel",
+            "op": "eq",
+            "value": "red"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ]
+        ],
+        "got": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "color-green",
+      "query": "green labeled images",
+      "latency_s": 20.691,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"green\" } ] } {\"constraints\":[] {\"clarification\":{\"message\":\"The request was not clear. Please specify the field you want to filter by (colorlabel, tag, album, person, place, daterange, rating, picklabel, colorlabel, orientation, caption).\"}}} {\"constraints\": [ { \"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"green\" } ]} {\"constraints\":[]} {\"tag\": \"green\"} {\"tag\": \"green labeled\"} {\"colorlabel\": \"green\"} {\"colorlabel\": \"green labeled\"} {\"colorlabel\": \"green\"} {\"colorlabel\": \"green labeled\"} {\"colorlabel\": \"green\", \"tag\": \"green\"} {\"colorlabel\": \"green\", \"tag\": \"green labeled\"} {\"colorlabel\": \"green labeled\"} {\"colorlabel\": \"green labeled\", \"tag\": \"green\"} {\"colorlabel\": \"green labeled\", \"tag\": \"green labeled\"} {\"colorlabel\": \"green labeled\", \"tag\": \"green labeled\"} {\"colorlabel\": \"green labeled\", \"tag\": \"green labeled\", \"tag\": \"green",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "colorlabel",
+            "op": "eq",
+            "value": "green"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "green"
+          ]
+        ],
+        "got": [
+          [
+            "colorlabel",
+            "eq",
+            "green"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "color-blue",
+      "query": "blue label photos",
+      "latency_s": 23.41,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"blue\" } ] } {\"constraints\":[] {\"message\":\"I couldn't map 'label' to a field. Please refine your request.\",\"choices\":[\"photos with blue label\",\"photos with blue color label\"]}} {\"constraints\":[],\"clarification\":{\"message\":\"I couldn't map 'label' to a field. Please refine your request.\",\"choices\":[\"photos with blue label\",\"photos with blue color label\"]}} {\"constraints\":[],\"clarification\":{\"message\":\"I couldn't map 'label' to a field. Please refine your request.\",\"choices\":[\"photos with blue label\",\"photos with blue color label\"]}} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":{\"message\":\"I couldn't map 'label' to a field. Please refine your request.\",\"choices\":[\"photos with blue label\",\"photos with blue color label\"]}} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "colorlabel",
+            "op": "eq",
+            "value": "blue"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "blue"
+          ]
+        ],
+        "got": [
+          [
+            "colorlabel",
+            "eq",
+            "blue"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "person-1",
+      "query": "photos of Kanishka",
+      "latency_s": 4.553,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"tag\", \"op\": \"contains\", \"value\": \"Kanishka\" } ] } {\"constraints\": [{\"field\": \"person\", \"op\": \"eq\", \"value\": \"Kanishka\"}]}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "tag",
+            "op": "contains",
+            "value": "Kanishka"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ]
+        ],
+        "got": [
+          [
+            "tag",
+            "contains",
+            "kanishka"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "person-case",
+      "query": "pictures of kanishka",
+      "latency_s": 6.019,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"tag\", \"op\": \"contains\", \"value\": \"kanishka\" } ] } {\"constraints\": [{\"field\": \"tag\", \"op\": \"contains\", \"value\": \"kanishka\"}]}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "tag",
+            "op": "contains",
+            "value": "kanishka"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ]
+        ],
+        "got": [
+          [
+            "tag",
+            "contains",
+            "kanishka"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "tag-1",
+      "query": "pictures tagged sunset",
+      "latency_s": 28.802,
+      "raw_output": "{\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\"}]} {\"constraints\":",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "tag",
+            "op": "eq",
+            "value": "sunset"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "tag",
+            "eq",
+            "sunset"
+          ]
+        ],
+        "got": [
+          [
+            "tag",
+            "eq",
+            "sunset"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "tag-2",
+      "query": "photos tagged beach",
+      "latency_s": 37.475,
+      "raw_output": "{\"constraints\": [{\"field\": \"tag\", \"op\": \"eq\", \"value\": \"beach\"}]} {\"constraints\":[]} {\"clarification\":null} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is unclear. Please specify the exact tag or add more details.\", \"choices\": [\"beach\", \"add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is unclear. Please specify the exact tag or add more details.\", \"choices\": [\"beach\", \"add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is unclear. Please specify the exact tag or add more details.\", \"choices\": [\"beach\", \"add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is unclear. Please specify the exact tag or add more details.\", \"choices\": [\"beach\", \"add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is unclear. Please specify the exact tag or add more details.\", \"choices\": [\"beach\", \"add more details\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is unclear. Please specify the exact tag or",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "tag",
+            "op": "eq",
+            "value": "beach"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "tag",
+            "eq",
+            "beach"
+          ]
+        ],
+        "got": [
+          [
+            "tag",
+            "eq",
+            "beach"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "place-ny",
+      "query": "photos from New York",
+      "latency_s": 28.401,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"New York\" } ] } {\"constraints\":[] {\"message\":\"The request is too vague.\",\"choices\":[\"Specify a date range\",\"Specify a rating\"]}} {\"constraints\":[],\"clarification\":{\"message\":\"The request is too vague.\",\"choices\":[\"Specify a date range\",\"Specify a rating\"]}} {\"constraints\":[],\"clarification\":{\"message\":\"The request is too vague.\",\"choices\":[\"Specify a date range\",\"Specify a rating\"]}} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":{\"message\":\"The request is too vague.\",\"choices\":[\"Specify a date range\",\"Specify a rating\"]}} {\"constraints\":[],\"clarification\":{\"message\":\"The request is too vague.\",\"choices\":[\"Specify a date range\",\"Specify a rating\"]}} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clarification\":null} {\"constraints\":[],\"clar",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "New York"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ],
+        "got": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "place-paris",
+      "query": "pictures taken in Paris",
+      "latency_s": 28.229,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ] } {\"constraints\": []} {\"clarification\": {\"message\": \"I need more details, please specify the date range or rating.\", \"choices\": [\"last year\", \"this year\", \"specific date range\", \"specific rating\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I need more details, please specify the date range or rating.\", \"choices\": [\"last year\", \"this year\", \"specific date range\", \"specific rating\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I need more details, please specify the date range or rating.\", \"choices\": [\"last year\", \"this year\", \"specific date range\", \"specific rating\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I need more details, please specify the date range or rating.\", \"choices\": [\"last year\", \"this year\", \"specific date range\", \"specific rating\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I need more details, please specify the date range or rating.\", \"choices\": [\"last year\", \"this year\", \"specific date range",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "Paris"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ],
+        "got": [
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "place-case",
+      "query": "photos from new york",
+      "latency_s": 27.589,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"New York\" } ] } {\"constraints\": []} {\"clarification\": {\"message\": \"I couldn't find a field for 'new york'. Please refine your request.\", \"choices\": [\"photos from new york\", \"photos of new york\", \"photos of new york city\", \"photos of new york state\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I couldn't find a field for 'new york'. Please refine your request.\", \"choices\": [\"photos from new york\", \"photos of new york\", \"photos of new york city\", \"photos of new york state\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I couldn't find a field for 'new york'. Please refine your request.\", \"choices\": [\"photos from new york\", \"photos of new york\", \"photos of new york city\", \"photos of new york state\"]}} {\"constraints\": []} {\"clarification\": {\"message\": \"I couldn't find a field for 'new york'. Please refine your request.\", \"choices\": [\"photos from new york\", \"photos of new york\", \"photos of new york city\",",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "New York"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ],
+        "got": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "place-country",
+      "query": "images from France",
+      "latency_s": 29.232,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"France\" } ] } {\"constraints\":[]} {\"message\": \"It seems like you meant to specify a date range. Could you please clarify if you want images from a specific year or month?\", \"choices\": [\"specific year\", \"specific month\"]} {\"message\": \"It seems like you meant to specify a date range. Could you please clarify if you want images from a specific year or month?\", \"choices\": [\"specific year\", \"specific month\"]} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems like you meant to specify a date range. Could you please clarify if you want images from a specific year or month?\", \"choices\": [\"specific year\", \"specific month\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems like you meant to specify a date range. Could you please clarify if you want images from a specific year or month?\", \"choices\": [\"specific year\", \"specific month\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems like you meant to specify a date range. Could you please clarify if you want images from a specific year or month?\", \"choices\": [\"specific",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "France"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "france"
+          ]
+        ],
+        "got": [
+          [
+            "place",
+            "eq",
+            "france"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "date-year",
+      "query": "photos from 2023",
+      "latency_s": 6.781,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ] } {\"clarification\": null}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2023-01-01..2023-12-31"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "date-month",
+      "query": "images from March 2024",
+      "latency_s": 28.805,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2024-03-01..2024-03-31\" } ] } {\"constraints\":[]} {\"message\": \"The request is not clear. Please specify a specific date or a range of dates.\", \"choices\": [\"March 2024\", \"2024-03-01..2024-03-31\"]} {\"message\": \"The request is not clear. Please specify a specific date or a range of dates.\", \"choices\": [\"March 2024\", \"2024-03-01..2024-03-31\"]} {\"constraints\":[]} {\"clarification\": {\"message\": \"The request is not clear. Please specify a specific date or a range of dates.\", \"choices\": [\"March 2024\", \"2024-03-01..2024-03-31\"]}} {\"constraints\":[]} {\"message\": \"The request is not clear. Please specify a specific date or a range of dates.\", \"choices\": [\"March",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2024-03-01..2024-03-31"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2024-03-01..2024-03-31"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2024-03-01..2024-03-31"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "date-year2",
+      "query": "pictures taken in 2020",
+      "latency_s": 30.192,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2020-01-01..2020-12-31\" } ] } {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a range. Please refine your request.\", \"choices\": [\"2020\", \"2020-01-01..2020-12-31\"]}} {\"clarification\": {\"message\": \"It seems you meant to specify a range. Please refine your request.\", \"choices\": [\"2020\", \"2020-01-01..2020-12-31\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a range. Please refine your request.\", \"choices\": [\"2020\", \"2020-01-01..2020-12-31\"]}} {\"constraints\":[]} {\"clarification\": {\"message\": \"It seems you meant to specify a range. Please refine your request.\", \"choices\": [\"2020\",",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2020-01-01..2020-12-31"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2020-01-01..2020-12-31"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2020-01-01..2020-12-31"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "orient-land",
+      "query": "landscape orientation photos",
+      "latency_s": 3.124,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"orientation\", \"op\": \"eq\", \"value\": \"landscape\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "orientation",
+            "op": "eq",
+            "value": "landscape"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ],
+        "got": [
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "orient-port",
+      "query": "portrait photos",
+      "latency_s": 6.341,
+      "raw_output": "{\"constraints\": [], \"clarification\": null} Portrait photos are typically associated with a person, so the field \"person\" is used. The request does not specify any other constraints, so the constraints array is empty. No clarification is needed. {\"constraints\": [], \"clarification\": null}",
+      "parsed": {
+        "constraints": [],
+        "clarification": null
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "orientation",
+            "eq",
+            "portrait"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "orient-horiz",
+      "query": "horizontally oriented images",
+      "latency_s": 3.024,
+      "raw_output": "{\"constraints\": [{\"field\": \"orientation\", \"op\": \"eq\", \"value\": \"horizontal\"}]} No clarification needed.",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "orientation",
+            "op": "eq",
+            "value": "horizontal"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ],
+        "got": [
+          [
+            "orientation",
+            "eq",
+            "horizontal"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "album-1",
+      "query": "photos in the Vacation album",
+      "latency_s": 7.174,
+      "raw_output": "{\"constraints\": [{\"field\": \"album\", \"op\": \"eq\", \"value\": \"Vacation\"}]} {\"clarification\": null} {\"constraints\": [{\"field\": \"album\", \"op\": \"eq\", \"value\": \"Vacation\"}]} {\"clarification\": null}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "album",
+            "op": "eq",
+            "value": "Vacation"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "album",
+            "eq",
+            "vacation"
+          ]
+        ],
+        "got": [
+          [
+            "album",
+            "eq",
+            "vacation"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "album-2",
+      "query": "images in my Wedding album",
+      "latency_s": 6.94,
+      "raw_output": "{\"constraints\": [{\"field\": \"album\", \"op\": \"eq\", \"value\": \"Wedding\"}]} {\"clarification\": null} {\"constraints\": [{\"field\": \"album\", \"op\": \"eq\", \"value\": \"Wedding\"}]} {\"clarification\": null}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "album",
+            "op": "eq",
+            "value": "Wedding"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "album",
+            "eq",
+            "wedding"
+          ]
+        ],
+        "got": [
+          [
+            "album",
+            "eq",
+            "wedding"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "caption-1",
+      "query": "photos with birthday in the caption",
+      "latency_s": 12.187,
+      "raw_output": "{\"constraints\": [], \"clarification\": {\"message\": \"I couldn't find any photos with 'birthday' in the caption. Please refine your request.\", \"choices\": [\"Try a different word in the caption\", \"Try a different phrase in the caption\"]}} {\"constraints\": [], \"clarification\": {\"message\": \"I couldn't find any photos with 'birthday' in the caption. Please refine your request.\", \"choices\": [\"Try a different word in the caption\", \"Try a different phrase in the caption\"]}}",
+      "parsed": {
+        "constraints": [],
+        "clarification": {
+          "message": "I couldn't find any photos with 'birthday' in the caption. Please refine your request.",
+          "choices": [
+            "Try a different word in the caption",
+            "Try a different phrase in the caption"
+          ]
+        }
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "caption",
+            "contains",
+            "birthday"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "keyword-1",
+      "query": "images with holiday keyword",
+      "latency_s": 4.785,
+      "raw_output": "{\"constraints\": [], \"clarification\": null} {\"constraints\": [ { \"field\": \"caption\", \"op\": \"contains\", \"value\": \"holiday\" } ], \"clarification\": null}",
+      "parsed": {
+        "constraints": [],
+        "clarification": null
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "keyword",
+            "contains",
+            "holiday"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "comp-date-rating",
+      "query": "photos from 2023 rated 5 stars",
+      "latency_s": 8.554,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"eq\", \"value\": 5 }, { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ] } {\"clarification\": null}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "eq",
+            "value": 5
+          },
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2023-01-01..2023-12-31"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-pick-rating",
+      "query": "flagged photos rated at least 3 stars",
+      "latency_s": 6.179,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accepted\" }, { \"field\": \"rating\", \"op\": \"gte\", \"value\": 3 } ] } {\"clarification\": null}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "accepted"
+          },
+          {
+            "field": "rating",
+            "op": "gte",
+            "value": 3
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ],
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ],
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-tag-color",
+      "query": "sunset photos with red labels",
+      "latency_s": 6.884,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"red\" }, { \"field\": \"orientation\", \"op\": \"eq\", \"value\": \"landscape\" } ], \"clarification\": null }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "colorlabel",
+            "op": "eq",
+            "value": "red"
+          },
+          {
+            "field": "orientation",
+            "op": "eq",
+            "value": "landscape"
+          }
+        ],
+        "clarification": null
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.5,
+        "recall": 0.5,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ],
+          [
+            "tag",
+            "eq",
+            "sunset"
+          ]
+        ],
+        "got": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ],
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-person-place",
+      "query": "photos of Kanishka in Paris",
+      "latency_s": 5.909,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"Kanishka\" }, { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "person",
+            "op": "eq",
+            "value": "Kanishka"
+          },
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "Paris"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ],
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ],
+        "got": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ],
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-triple",
+      "query": "five star landscape photos from 2022",
+      "latency_s": 11.628,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"eq\", \"value\": 5 }, { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2022-01-01..2022-12-31\" }, { \"field\": \"orientation\", \"op\": \"eq\", \"value\": \"landscape\" } ], \"clarification\": null }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "eq",
+            "value": 5
+          },
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2022-01-01..2022-12-31"
+          },
+          {
+            "field": "orientation",
+            "op": "eq",
+            "value": "landscape"
+          }
+        ],
+        "clarification": null
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2022-01-01..2022-12-31"
+          ],
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2022-01-01..2022-12-31"
+          ],
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-place-date",
+      "query": "photos from Paris in 2023",
+      "latency_s": 10.807,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" }, { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ] } {\"clarification\": null}",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "Paris"
+          },
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2023-01-01..2023-12-31"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ambig-landscape",
+      "query": "landscape photos",
+      "latency_s": 10.138,
+      "raw_output": "{\"constraints\": [], \"clarification\": null} Landscape photos do not inherently have specific constraints like tags, albums, persons, places, dates, ratings, picklabels, colorlabels, orientations, or captions. Therefore, no constraints are needed, and no clarification is required. {\"constraints\": [], \"clarification\": null}",
+      "parsed": {
+        "constraints": [],
+        "clarification": null
+      },
+      "score": {
+        "type": "clarification",
+        "correct": false
+      }
+    },
+    {
+      "id": "ambig-best",
+      "query": "best photos",
+      "latency_s": 11.96,
+      "raw_output": "{\"constraints\": [], \"clarification\": null} {\"constraints\": [], \"clarification\": \"Did you mean to specify a tag, album, person, place, date range, rating, picklabel, colorlabel, orientation, or caption? If you want to see photos from a specific time period, please specify the start and end dates.\"}",
+      "parsed": {
+        "constraints": [],
+        "clarification": null
+      },
+      "score": {
+        "type": "clarification",
+        "correct": false
+      }
+    },
+    {
+      "id": "unknown-1",
+      "query": "photos taken with a Canon",
+      "latency_s": 13.122,
+      "raw_output": "{\"constraints\": [], \"clarification\": null} {\"constraints\": [], \"clarification\": null} To translate the request \"photos taken with a Canon\" into JSON, we need to map the request to the supported fields. The field \"tag\" is the closest match for a camera model, but it is not a perfect fit. Therefore, we use the clarification object to ask the user to refine the request. Here's the JSON object:",
+      "parsed": {
+        "constraints": [],
+        "clarification": null
+      },
+      "score": {
+        "type": "unresolved",
+        "correct": true
+      }
+    },
+    {
+      "id": "unknown-2",
+      "query": "videos longer than 5 minutes",
+      "latency_s": 10.133,
+      "raw_output": "{\"constraints\": [], \"clarification\": null} {\"constraints\": [], \"clarification\": \"The request seems to be for video search, but the fields available for photo searches (tag, album, person, place, daterange, rating, picklabel, colorlabel, orientation, caption) do not apply to videos. Please refine your request to use appropriate fields for video searches.\"}",
+      "parsed": {
+        "constraints": [],
+        "clarification": null
+      },
+      "score": {
+        "type": "unresolved",
+        "correct": true
+      }
+    },
+    {
+      "id": "empty-1",
+      "query": "asdfghjkl nonsense query",
+      "latency_s": 7.654,
+      "raw_output": "{\"constraints\": [], \"clarification\": {\"message\": \"Your query was unclear. Please refine your request.\", \"choices\": [\"Please provide more details.\", \"Could you please specify what you're looking for?\", \"Could you give more context or a specific term?\" ]}} To translate the user request into JSON:",
+      "parsed": {
+        "constraints": [],
+        "clarification": {
+          "message": "Your query was unclear. Please refine your request.",
+          "choices": [
+            "Please provide more details.",
+            "Could you please specify what you're looking for?",
+            "Could you give more context or a specific term?"
+          ]
+        }
+      },
+      "score": {
+        "type": "empty",
+        "correct": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "queries": [
+    { "id": "rating-exact", "query": "five star photos", "expected": [{"field": "rating", "op": "eq", "value": "5"}] },
+    { "id": "rating-gte", "query": "photos rated at least 3", "expected": [{"field": "rating", "op": "gte", "value": "3"}] },
+    { "id": "rating-word", "query": "four star pictures", "expected": [{"field": "rating", "op": "eq", "value": "4"}] },
+    { "id": "rating-min", "query": "images with a minimum rating of 2", "expected": [{"field": "rating", "op": "gte", "value": "2"}] },
+
+    { "id": "pick-flagged", "query": "flagged photos", "expected": [{"field": "picklabel", "op": "eq", "value": "accepted"}] },
+    { "id": "pick-rejected", "query": "rejected pictures", "expected": [{"field": "picklabel", "op": "eq", "value": "rejected"}] },
+    { "id": "pick-pending", "query": "pending photos", "expected": [{"field": "picklabel", "op": "eq", "value": "pending"}] },
+
+    { "id": "color-red", "query": "photos with a red label", "expected": [{"field": "colorlabel", "op": "eq", "value": "red"}] },
+    { "id": "color-green", "query": "green labeled images", "expected": [{"field": "colorlabel", "op": "eq", "value": "green"}] },
+    { "id": "color-blue", "query": "blue label photos", "expected": [{"field": "colorlabel", "op": "eq", "value": "blue"}] },
+
+    { "id": "person-1", "query": "photos of Kanishka", "expected": [{"field": "person", "op": "eq", "value": "kanishka"}] },
+    { "id": "person-case", "query": "pictures of kanishka", "expected": [{"field": "person", "op": "eq", "value": "kanishka"}] },
+
+    { "id": "tag-1", "query": "pictures tagged sunset", "expected": [{"field": "tag", "op": "eq", "value": "sunset"}] },
+    { "id": "tag-2", "query": "photos tagged beach", "expected": [{"field": "tag", "op": "eq", "value": "beach"}] },
+
+    { "id": "place-ny", "query": "photos from New York", "expected": [{"field": "place", "op": "eq", "value": "new york"}] },
+    { "id": "place-paris", "query": "pictures taken in Paris", "expected": [{"field": "place", "op": "eq", "value": "paris"}] },
+    { "id": "place-case", "query": "photos from new york", "expected": [{"field": "place", "op": "eq", "value": "new york"}] },
+    { "id": "place-country", "query": "images from France", "expected": [{"field": "place", "op": "eq", "value": "france"}] },
+
+    { "id": "date-year", "query": "photos from 2023", "expected": [{"field": "daterange", "op": "between", "value": "2023-01-01..2023-12-31"}] },
+    { "id": "date-month", "query": "images from March 2024", "expected": [{"field": "daterange", "op": "between", "value": "2024-03-01..2024-03-31"}] },
+    { "id": "date-year2", "query": "pictures taken in 2020", "expected": [{"field": "daterange", "op": "between", "value": "2020-01-01..2020-12-31"}] },
+
+    { "id": "orient-land", "query": "landscape orientation photos", "expected": [{"field": "orientation", "op": "eq", "value": "landscape"}] },
+    { "id": "orient-port", "query": "portrait photos", "expected": [{"field": "orientation", "op": "eq", "value": "portrait"}] },
+    { "id": "orient-horiz", "query": "horizontally oriented images", "expected": [{"field": "orientation", "op": "eq", "value": "landscape"}] },
+
+    { "id": "album-1", "query": "photos in the Vacation album", "expected": [{"field": "album", "op": "eq", "value": "vacation"}] },
+    { "id": "album-2", "query": "images in my Wedding album", "expected": [{"field": "album", "op": "eq", "value": "wedding"}] },
+
+    { "id": "caption-1", "query": "photos with birthday in the caption", "expected": [{"field": "caption", "op": "contains", "value": "birthday"}] },
+    { "id": "keyword-1", "query": "images with holiday keyword", "expected": [{"field": "keyword", "op": "contains", "value": "holiday"}] },
+
+    { "id": "comp-date-rating", "query": "photos from 2023 rated 5 stars", "expected": [{"field": "daterange", "op": "between", "value": "2023-01-01..2023-12-31"}, {"field": "rating", "op": "eq", "value": "5"}] },
+    { "id": "comp-pick-rating", "query": "flagged photos rated at least 3 stars", "expected": [{"field": "picklabel", "op": "eq", "value": "accepted"}, {"field": "rating", "op": "gte", "value": "3"}] },
+    { "id": "comp-tag-color", "query": "sunset photos with red labels", "expected": [{"field": "tag", "op": "eq", "value": "sunset"}, {"field": "colorlabel", "op": "eq", "value": "red"}] },
+    { "id": "comp-person-place", "query": "photos of Kanishka in Paris", "expected": [{"field": "person", "op": "eq", "value": "kanishka"}, {"field": "place", "op": "eq", "value": "paris"}] },
+    { "id": "comp-triple", "query": "five star landscape photos from 2022", "expected": [{"field": "rating", "op": "eq", "value": "5"}, {"field": "orientation", "op": "eq", "value": "landscape"}, {"field": "daterange", "op": "between", "value": "2022-01-01..2022-12-31"}] },
+    { "id": "comp-place-date", "query": "photos from Paris in 2023", "expected": [{"field": "place", "op": "eq", "value": "Paris"}, {"field": "daterange", "op": "between", "value": "2023-01-01..2023-12-31"}] },
+
+    { "id": "ambig-landscape", "query": "landscape photos", "expected_clarification": true, "note": "landscape = orientation vs subject tag" },
+    { "id": "ambig-best", "query": "best photos", "expected_clarification": true, "note": "best = picklabel vs high rating" },
+
+    { "id": "unknown-1", "query": "photos taken with a Canon", "expected_unresolved": true, "note": "camera make not mapped" },
+    { "id": "unknown-2", "query": "videos longer than 5 minutes", "expected_unresolved": true, "note": "video duration not mapped" },
+    { "id": "empty-1", "query": "asdfghjkl nonsense query", "expected_empty": true, "note": "nothing maps" }
+  ]
+}

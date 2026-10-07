@@ -1,0 +1,2 @@
++LIBRAW Snapshot 2026-09-14
+libraw:116924e5bcb9483ef9c5fbe7f3cfc5a8a4b97064

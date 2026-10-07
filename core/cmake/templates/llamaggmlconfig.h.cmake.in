@@ -1,0 +1,36 @@
+/* ============================================================
+ *
+ * This file is a part of digiKam project
+ * https://www.digikam.org
+ *
+ * Date        : 2026-08-26
+ * Description : Auto-generated header for llama.cpp and ggml configurations.
+ *
+ * SPDX-FileCopyrightText: 2026 by Gilles Caulier <caulier dot gilles at gmail dot com>
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * ============================================================ */
+
+#pragma once
+
+// Qt includes
+
+#include <QString>
+#include <QMap>
+
+/**
+ * LLAMA.CPP Configuration
+*/
+const QMap<QString, QString> LLAMA_CONFIG =
+{
+    @LLAMA_CONFIG_ENTRIES@
+};
+
+/**
+ * GGML Configuration
+ */
+const QMap<QString, QString> GGML_CONFIG =
+{
+    @GGML_CONFIG_ENTRIES@
+};

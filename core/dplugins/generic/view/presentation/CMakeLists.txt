@@ -1,0 +1,124 @@
+#
+# SPDX-FileCopyrightText: 2010-2026 by Gilles Caulier, <caulier dot gilles at gmail dot com>
+#
+# SPDX-License-Identifier: BSD-3-Clause
+#
+
+APPLY_COMMON_POLICIES()
+
+include(MacroDPlugins)
+
+if(HAVE_MEDIAPLAYER)
+
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/audio)
+
+    include_directories($<TARGET_PROPERTY:Qt6::MultimediaWidgets,INTERFACE_INCLUDE_DIRECTORIES>)
+
+    set(QTMEDIA_BACKEND Qt6::Multimedia
+                        Qt6::MultimediaWidgets
+    )
+
+endif()
+
+if(HAVE_OPENGL)
+
+    if(APPLE)
+
+        # Under MacOS 10.14 (Mojave), OpenGL API start to be deprecated in favor to Apple Metal API.
+        # https://appleinsider.com/articles/18/06/28/why-macos-mojave-requires-metal----and-deprecates-opengl
+        add_definitions(-DGL_SILENCE_DEPRECATION)
+
+    endif()
+
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/opengl)
+    include_directories($<TARGET_PROPERTY:Qt6::OpenGL,INTERFACE_INCLUDE_DIRECTORIES>)
+
+    set(QT_OPENGL_LIBRARIES Qt6::OpenGL)
+
+    include_directories($<TARGET_PROPERTY:Qt6::OpenGLWidgets,INTERFACE_INCLUDE_DIRECTORIES>)
+    set(QT_OPENGL_LIBRARIES ${QT_OPENGL_LIBRARIES} Qt6::OpenGLWidgets)
+
+endif()
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/dialogs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/widgets
+                    ${CMAKE_CURRENT_SOURCE_DIR}/common
+)
+
+include_directories($<TARGET_PROPERTY:Qt6::Widgets,INTERFACE_INCLUDE_DIRECTORIES>
+                    $<TARGET_PROPERTY:Qt6::Core,INTERFACE_INCLUDE_DIRECTORIES>
+
+                    $<TARGET_PROPERTY:KF6::ConfigCore,INTERFACE_INCLUDE_DIRECTORIES>
+                    $<TARGET_PROPERTY:KF6::I18n,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+set(presentationplugin_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentation_captionpage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentation_advpage.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/presentationctrlwidget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/widgets/presentationwidget.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/presentationloader.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentationdlg.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentation_mainpage.cpp
+
+    ${CMAKE_CURRENT_SOURCE_DIR}/presentationmngr.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/presentationplugin.cpp
+)
+
+if(HAVE_OPENGL)
+
+    set(presentationplugin_SRCS
+        ${presentationplugin_SRCS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/opengl/presentationgl.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/opengl/presentationkb.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/opengl/kbeffect.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/opengl/kbimageloader.cpp
+    )
+
+endif()
+
+if(HAVE_MEDIAPLAYER)
+
+    set(presentationplugin_SRCS
+        ${presentationplugin_SRCS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/audio/presentation_audiopage.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/audio/presentationaudiolist.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/audio/presentationaudiowidget.cpp
+    )
+
+    ki18n_wrap_ui(presentationplugin_SRCS
+                  ${CMAKE_CURRENT_SOURCE_DIR}/audio/presentation_audiopage.ui
+                  ${CMAKE_CURRENT_SOURCE_DIR}/audio/presentationaudiowidget.ui
+    )
+
+endif()
+
+ki18n_wrap_ui(presentationplugin_SRCS
+              ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentation_mainpage.ui
+              ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentation_captionpage.ui
+              ${CMAKE_CURRENT_SOURCE_DIR}/dialogs/presentation_advpage.ui
+              ${CMAKE_CURRENT_SOURCE_DIR}/widgets/presentationctrlwidget.ui
+)
+
+
+if(HAVE_OPENGL)
+
+    DIGIKAM_ADD_GENERIC_PLUGIN(NAME    Presentation
+                               SOURCES ${presentationplugin_SRCS}
+                               DEPENDS ${QT_OPENGL_LIBRARIES}
+                                       ${QTMEDIA_BACKEND}
+                                       ${OPENGL_LIBRARIES}
+    )
+
+else()
+
+    DIGIKAM_ADD_GENERIC_PLUGIN(NAME    Presentation
+                               SOURCES ${presentationplugin_SRCS}
+                               DEPENDS ${QTMEDIA_BACKEND}
+
+    )
+
+endif()

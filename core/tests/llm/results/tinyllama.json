@@ -1,0 +1,1057 @@
+{
+  "summary": {
+    "model": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+    "total": 39,
+    "constraint_accuracy": 0.176,
+    "constraint_correct": 6,
+    "constraint_total": 34,
+    "field_error_counts": {
+      "date": 1,
+      "rating": 3,
+      "picklabel": 4,
+      "colorlabel": 3,
+      "person": 3,
+      "place": 6,
+      "tag": 3,
+      "daterange": 5,
+      "orientation": 3,
+      "album": 2,
+      "caption": 1,
+      "keyword": 1
+    },
+    "behavior_handled_by_model": 1,
+    "behavior_total": 5,
+    "latency_median_s": 6.35,
+    "latency_p90_s": 14.971,
+    "latency_max_s": 22.585,
+    "model_load_rss_mb": 1202.8,
+    "peak_rss_mb": 1316.6
+  },
+  "results": [
+    {
+      "id": "rating-exact",
+      "query": "five star photos",
+      "latency_s": 22.585,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" }, { \"field\": \"date\", \"op\": \"eq\", \"value\": \"2026-08-11\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" }, { \"field\": \"date\", \"op\": \"eq\", \"value\": \"last year\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" }, { \"field\": \"date\", \"op\": \"eq\", \"value\": \"this year\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "accpeted"
+          },
+          {
+            "field": "date",
+            "op": "eq",
+            "value": "2026-08-11"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ],
+        "got": [
+          [
+            "date",
+            "eq",
+            "2026-08-11"
+          ],
+          [
+            "picklabel",
+            "eq",
+            "accpeted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "rating-gte",
+      "query": "photos rated at least 3",
+      "latency_s": 4.832,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" }, { \"field\": \"rating\", \"op\": \"gte\", \"value\": 3 } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "accpeted"
+          },
+          {
+            "field": "rating",
+            "op": "gte",
+            "value": 3
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.5,
+        "recall": 1.0,
+        "expected": [
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "accpeted"
+          ],
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "rating-word",
+      "query": "four star pictures",
+      "latency_s": 14.971,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" }, { \"field\": \"date\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ], \"clarification\": null | { \"message\": \"Please provide a list of four star pictures from the year 2023.\", \"choices\": [ { \"value\": \"2023-01-01..2023-12-31\" }, { \"value\": \"2023-01-01..2023-01-31\" }, { \"value\": \"2023-01-01..2023-02-28\" }, { \"value\": \"2023-01-01..2023-03-31\" } ] }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "rating",
+            "eq",
+            "4"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "rating-min",
+      "query": "images with a minimum rating of 2",
+      "latency_s": 2.387,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"eq\", \"value\": 2 } ], \"clarification\": null }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "rating",
+            "op": "eq",
+            "value": 2
+          }
+        ],
+        "clarification": null
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "rating",
+            "gte",
+            "2"
+          ]
+        ],
+        "got": [
+          [
+            "rating",
+            "eq",
+            "2"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "pick-flagged",
+      "query": "flagged photos",
+      "latency_s": 5.333,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"flagged\" } ], \"clarification\": null | { \"message\": \"Please specify the date range for the flagged photos. For example, 'last year' or 'this year'.\", \"choices\": [ \"last year\", \"this year\" ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "pick-rejected",
+      "query": "rejected pictures",
+      "latency_s": 2.237,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"rejected\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "rejected"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "rejected"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "rejected"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "pick-pending",
+      "query": "pending photos",
+      "latency_s": 2.147,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"pending\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "pending"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "pending"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "pending"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "color-red",
+      "query": "photos with a red label",
+      "latency_s": 3.883,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"red\" } ], \"clarification\": null | { \"message\": \"No red photos found\", \"choices\": [ \"No red photos found\" ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "color-green",
+      "query": "green labeled images",
+      "latency_s": 4.223,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"green\" } ], \"clarification\": null | { \"message\": \"No green images found\", \"choices\": [ \"No green images found\", \"Search again\" ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "green"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "color-blue",
+      "query": "blue label photos",
+      "latency_s": 4.847,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"blue\" } ], \"clarification\": null | { \"message\": \"Please specify a specific color label, not a general color term. For example, 'blue' or 'blue-green'.\" } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "blue"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "person-1",
+      "query": "photos of Kanishka",
+      "latency_s": 11.238,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Kanishka\" } ], \"clarification\": null | { \"message\": \"Kanishka is not a person, nor a place, nor a date. Please refine your request.\", \"choices\": [ { \"value\": \"Kanishka is a person\", \"op\": \"eq\", \"label\": \"Person\" }, { \"value\": \"Kanishka is a place\", \"op\": \"eq\", \"label\": \"Place\" }, { \"value\": \"Kanishka is a date\", \"op\": \"eq\", \"label\": \"Date\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "person-case",
+      "query": "pictures of kanishka",
+      "latency_s": 2.781,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Kanishka\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "Kanishka"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ]
+        ],
+        "got": [
+          [
+            "place",
+            "eq",
+            "kanishka"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "tag-1",
+      "query": "pictures tagged sunset",
+      "latency_s": 7.119,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"tag\", \"op\": \"eq\", \"value\": \"sunset\" } ], \"clarification\": null | { \"message\": \"Sunset is not a tag. Please refine your request.\", \"choices\": [ { \"value\": \"tag:sunset\", \"label\": \"Tag: sunset\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "tag",
+            "eq",
+            "sunset"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "tag-2",
+      "query": "photos tagged beach",
+      "latency_s": 12.271,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"tag\", \"op\": \"eq\", \"value\": \"beach\" } ], \"clarification\": null | { \"message\": \"No beach photos found. Please refine your search.\", \"choices\": [ { \"value\": \"Try a different tag\", \"message\": \"Try a different tag\" }, { \"value\": \"Try a different date range\", \"message\": \"Try a different date range\" }, { \"value\": \"Try a different location\", \"message\": \"Try a different location\" }, { \"value\": \"Try a different picklabel\", \"message\": \"Try a different picklabel\" } ] }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "tag",
+            "eq",
+            "beach"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "place-ny",
+      "query": "photos from New York",
+      "latency_s": 9.235,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"New York\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"rating\", \"op\": \"gte\", \"value\": 3 } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "place",
+            "op": "eq",
+            "value": "New York"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ],
+        "got": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "place-paris",
+      "query": "pictures taken in Paris",
+      "latency_s": 8.56,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Please specify the date range for the photos you want to search for. The range should be in the form YYYY-MM-DD..YYYY-MM-DD, with op 'between'. For example, 'last year' means 2025-01-01..2025-12-31, 'this year' means 2026-01-01..2026-12-31.'\" } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "place-case",
+      "query": "photos from new york",
+      "latency_s": 5.74,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"New York\" } ], \"clarification\": null | { \"message\": \"New York is not a valid place. Please refine your request.\", \"choices\": [ { \"value\": \"Paris\", \"label\": \"Paris\" }, { \"value\": \"London\", \"label\": \"London\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "new york"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "place-country",
+      "query": "images from France",
+      "latency_s": 5.005,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"France is not a person, nor a caption. Please refine your request.\", \"choices\": [ { \"value\": \"Paris\" }, { \"value\": \"France\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "place",
+            "eq",
+            "france"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "date-year",
+      "query": "photos from 2023",
+      "latency_s": 7.649,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ], \"clarification\": null | { \"message\": \"Please specify a specific year, like 2023 or 2024. \", \"choices\": [ { \"value\": \"2023\", \"label\": \"2023\" }, { \"value\": \"2024\", \"label\": \"2024\" } ] }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "date-month",
+      "query": "images from March 2024",
+      "latency_s": 6.695,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2024-03-01..2024-03-31\" } ], \"clarification\": null | { \"message\": \"March 2024 is not a valid date range. Please refine your request.\", \"choices\": [ { \"value\": \"2024-03-01..2024-03-31\" } ] }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2024-03-01..2024-03-31"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "date-year2",
+      "query": "pictures taken in 2020",
+      "latency_s": 6.613,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Please specify the year you took the photos. For example, 2020.\", \"choices\": [ { \"value\": \"2020\" }, { \"value\": \"2021\" }, { \"value\": \"2022\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2020-01-01..2020-12-31"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "orient-land",
+      "query": "landscape orientation photos",
+      "latency_s": 14.617,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"orientation\", \"op\": \"eq\", \"value\": \"landscape\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"date\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"date\", \"op\": \"gt\", \"value\": \"2023-01-01\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"pending\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"date\", \"op\": \"gt\", \"value\": \"2023-01-01\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "orientation",
+            "op": "eq",
+            "value": "landscape"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ],
+        "got": [
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "orient-port",
+      "query": "portrait photos",
+      "latency_s": 7.852,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Photo from Paris, 2023\", \"choices\": [ { \"value\": \"2023-01-01..2023-12-31\" }, { \"value\": \"2023-01-01..2023-12-31\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "orientation",
+            "eq",
+            "portrait"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "orient-horiz",
+      "query": "horizontally oriented images",
+      "latency_s": 3.965,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"orientation\", \"op\": \"eq\", \"value\": \"horizontal\" } ], \"clarification\": null | { \"message\": \"The requested orientation is not supported. Please choose another one.\", \"choices\": [ \"vertical\", \"portrait\" ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "album-1",
+      "query": "photos in the Vacation album",
+      "latency_s": 5.53,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"album\", \"op\": \"eq\", \"value\": \"Vacation\" } ], \"clarification\": null | { \"message\": \"Vacation album contains 1 photo\", \"choices\": [ { \"value\": \"1\", \"label\": \"Yes\" }, { \"value\": \"0\", \"label\": \"No\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "album",
+            "eq",
+            "vacation"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "album-2",
+      "query": "images in my Wedding album",
+      "latency_s": 8.66,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"album\", \"op\": \"eq\", \"value\": \"Wedding\" } ], \"clarification\": null | { \"message\": \"Wedding album contains 10 images\", \"choices\": [ { \"value\": \"10\" }, { \"value\": \"9\" }, { \"value\": \"8\" }, { \"value\": \"7\" }, { \"value\": \"6\" }, { \"value\": \"5\" }, { \"value\": \"4\" }, { \"value\": \"3\" }, { \"value\": \"2\" }, { \"value\": \"1\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "album",
+            "eq",
+            "wedding"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "caption-1",
+      "query": "photos with birthday in the caption",
+      "latency_s": 6.922,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"caption\", \"op\": \"eq\", \"value\": \"birthday\" } ], \"clarification\": null | { \"message\": \"Please specify a birthday date range. For example, 'last year' means 2025-01-01..2025-12-31, 'this year' means 2026-01-01..2026-12-31.\" } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "caption",
+            "contains",
+            "birthday"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "keyword-1",
+      "query": "images with holiday keyword",
+      "latency_s": 4.567,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Holiday\" } ], \"clarification\": null | { \"message\": \"Holiday images only\", \"choices\": [ \"Holiday 2023\", \"Holiday 2024\" ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "keyword",
+            "contains",
+            "holiday"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "comp-date-rating",
+      "query": "photos from 2023 rated 5 stars",
+      "latency_s": 4.595,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"daterange\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" }, { \"field\": \"rating\", \"op\": \"eq\", \"value\": 5 } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "daterange",
+            "op": "between",
+            "value": "2023-01-01..2023-12-31"
+          },
+          {
+            "field": "rating",
+            "op": "eq",
+            "value": 5
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ],
+        "got": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-pick-rating",
+      "query": "flagged photos rated at least 3 stars",
+      "latency_s": 3.815,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accepted\" }, { \"field\": \"rating\", \"op\": \"gte\", \"value\": 3 } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "accepted"
+          },
+          {
+            "field": "rating",
+            "op": "gte",
+            "value": 3
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": true,
+        "precision": 1.0,
+        "recall": 1.0,
+        "expected": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ],
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ],
+        "got": [
+          [
+            "picklabel",
+            "eq",
+            "accepted"
+          ],
+          [
+            "rating",
+            "gte",
+            "3"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-tag-color",
+      "query": "sunset photos with red labels",
+      "latency_s": 3.359,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accpeted\" }, { \"field\": \"colorlabel\", \"op\": \"eq\", \"value\": \"red\" } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "picklabel",
+            "op": "eq",
+            "value": "accpeted"
+          },
+          {
+            "field": "colorlabel",
+            "op": "eq",
+            "value": "red"
+          }
+        ]
+      },
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.5,
+        "recall": 0.5,
+        "expected": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ],
+          [
+            "tag",
+            "eq",
+            "sunset"
+          ]
+        ],
+        "got": [
+          [
+            "colorlabel",
+            "eq",
+            "red"
+          ],
+          [
+            "picklabel",
+            "eq",
+            "accpeted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comp-person-place",
+      "query": "photos of Kanishka in Paris",
+      "latency_s": 9.152,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Kanishka is not a person, nor a place, nor a date. Please refine your request.\", \"choices\": [ { \"value\": \"Kanishka is a person\", \"op\": \"eq\", \"label\": \"Person\" }, { \"value\": \"Kanishka is a place\", \"op\": \"eq\", \"label\": \"Place\" }, { \"value\": \"Kanishka is a date\", \"op\": \"eq\", \"label\": \"Date\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "person",
+            "eq",
+            "kanishka"
+          ],
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "comp-triple",
+      "query": "five star landscape photos from 2022",
+      "latency_s": 6.301,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"New York\" } ], \"clarification\": null | { \"message\": \"Please specify the date range for the photos. For example, 'last year' or 'this year'.\", \"choices\": [ { \"value\": \"last year\", \"label\": \"Last year\" }, { \"value\": \"this year\", \"label\": \"This year\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2022-01-01..2022-12-31"
+          ],
+          [
+            "orientation",
+            "eq",
+            "landscape"
+          ],
+          [
+            "rating",
+            "eq",
+            "5"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "comp-place-date",
+      "query": "photos from Paris in 2023",
+      "latency_s": 6.35,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Please specify a date range for the photos. For example, 'last year' or 'this year'.\", \"choices\": [ { \"value\": \"last year\", \"label\": \"Last year\" }, { \"value\": \"this year\", \"label\": \"This year\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "constraints",
+        "correct": false,
+        "precision": 0.0,
+        "recall": 0.0,
+        "expected": [
+          [
+            "daterange",
+            "between",
+            "2023-01-01..2023-12-31"
+          ],
+          [
+            "place",
+            "eq",
+            "paris"
+          ]
+        ],
+        "got": []
+      }
+    },
+    {
+      "id": "ambig-landscape",
+      "query": "landscape photos",
+      "latency_s": 8.922,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Please specify the date range for the photos you want to search for. The range should be in the form YYYY-MM-DD..YYYY-MM-DD, with op 'between'. For example, 'last year' means 2025-01-01..2025-12-31, 'this year' means 2026-01-01..2026-12-31.'\" } }",
+      "parsed": null,
+      "score": {
+        "type": "clarification",
+        "correct": false
+      }
+    },
+    {
+      "id": "ambig-best",
+      "query": "best photos",
+      "latency_s": 6.292,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ], \"clarification\": null | { \"message\": \"Best photos from Paris\", \"choices\": [ { \"value\": \"best-paris-photos\" }, { \"value\": \"best-paris-photos-2023\" } ] } }",
+      "parsed": null,
+      "score": {
+        "type": "clarification",
+        "correct": false
+      }
+    },
+    {
+      "id": "unknown-1",
+      "query": "photos taken with a Canon",
+      "latency_s": 15.351,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Canon\" } ], \"clarification\": null | { \"message\": \"Canon is not a valid field\", \"choices\": [ \"Canon\", \"Nikon\", \"Sony\", \"Fujifilm\", \"Panasonic\", \"Olympus\", \"Leica\", \"Samsung\", \"Lensbaby\", \"Sony\", \"Lensbaby\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"Sony\", \"S",
+      "parsed": null,
+      "score": {
+        "type": "unresolved",
+        "correct": true
+      }
+    },
+    {
+      "id": "unknown-2",
+      "query": "videos longer than 5 minutes",
+      "latency_s": 14.065,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"duration\", \"op\": \"gt\", \"value\": 5 } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"place\", \"op\": \"eq\", \"value\": \"Paris\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"date\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" }, { \"field\": \"rating\", \"op\": \"eq\", \"value\": 5 } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"picklabel\", \"op\": \"eq\", \"value\": \"accepted\" }, { \"field\": \"date\", \"op\": \"between\", \"value\": \"2023-01-01..2023-12-31\" }, { \"field\": \"rating\", \"op\": \"gte\", \"value\": 3 } ] }",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "duration",
+            "op": "gt",
+            "value": 5
+          }
+        ]
+      },
+      "score": {
+        "type": "unresolved",
+        "correct": false
+      }
+    },
+    {
+      "id": "empty-1",
+      "query": "asdfghjkl nonsense query",
+      "latency_s": 15.987,
+      "raw_output": "{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"asdfghjk\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"date\", \"op\": \"between\", \"value\": \"2026-08-11..2026-12-31\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"nonsens\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"nonsens\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"nonsens\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"nonsens\" } ] }\nJSON:\n{ \"constraints\": [ { \"field\": \"person\", \"op\": \"eq\", \"value\": \"nonsens\" } ] }\nJSON:\n{ \"constraint",
+      "parsed": {
+        "constraints": [
+          {
+            "field": "person",
+            "op": "eq",
+            "value": "asdfghjk"
+          }
+        ]
+      },
+      "score": {
+        "type": "empty",
+        "correct": false
+      }
+    }
+  ]
+}

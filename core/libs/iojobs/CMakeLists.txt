@@ -1,0 +1,32 @@
+#
+# SPDX-FileCopyrightText: 2015 by Mohamed_Anwer, <m_dot_anwer at gmx dot com>
+#
+# SPDX-License-Identifier: BSD-3-Clause
+#
+
+APPLY_COMMON_POLICIES()
+
+set(libiojobs_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/iojob.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/iojobdata.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/iojobsthread.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/iojobsmanager.cpp
+)
+
+include_directories(
+    $<TARGET_PROPERTY:Qt6::Sql,INTERFACE_INCLUDE_DIRECTORIES>
+    $<TARGET_PROPERTY:Qt6::Core,INTERFACE_INCLUDE_DIRECTORIES>
+
+    $<TARGET_PROPERTY:KF6::Service,INTERFACE_INCLUDE_DIRECTORIES>
+    $<TARGET_PROPERTY:KF6::I18n,INTERFACE_INCLUDE_DIRECTORIES>
+    $<TARGET_PROPERTY:KF6::Solid,INTERFACE_INCLUDE_DIRECTORIES>
+    $<TARGET_PROPERTY:KF6::ConfigCore,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+# Used by digikamgui
+add_library(gui_iojobs_obj OBJECT ${libiojobs_SRCS})
+
+target_compile_definitions(gui_iojobs_obj
+                           PRIVATE
+                           digikamgui_EXPORTS
+)
