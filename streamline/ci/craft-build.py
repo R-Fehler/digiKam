@@ -76,6 +76,18 @@ def main():
     run(craftmaster + ["--setup"])
     run(craftmaster + ["-c", "-i", "--options", "virtual.ignored=True", "--update", "craft"])
 
+    # Our copy of the digiKam blueprint (see its header for the differences).
+
+    blueprints = glob.glob(str(root / "**" / "craft-blueprints-kde" / "extragear" / "digikam" / "digikam.py"), recursive=True)
+
+    if not blueprints:
+        print("KDE's digiKam blueprint was not found below", root)
+        return 1
+
+    for blueprint in blueprints:
+        shutil.copy2(SRC_DIR / "streamline" / "ci" / "craft" / "digikam.py", blueprint)
+        print("Installed", blueprint)
+
     group("Installing dependencies (KDE binary cache)")
     run(craftmaster + ["-c", "--install-deps", PACKAGE])
 
