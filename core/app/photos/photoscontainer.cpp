@@ -95,6 +95,22 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     connect(m_toggle, &QAction::triggered,
             this, &PhotosContainer::slotToggle);
 
+    m_library->setDefaultThumbnailSize(m_broker->sizes().constLast());
+
+    connect(m_broker, &PhotosThumbnailBroker::signalPregenerationProgress,
+            this, [this] (int done, int total)
+        {
+            const int percent = ((total > 0) && (done < total)) ? (100 * done / total) : -1;
+
+            if (percent != m_preparingPercent)
+            {
+                m_preparingPercent = percent;
+
+                Q_EMIT signalPreparingChanged();
+            }
+        }
+    );
+
     // Thumbnails of files modified on disk are requested again.
 
     connect(m_broker, &PhotosThumbnailBroker::signalThumbnailChanged,
@@ -133,6 +149,23 @@ PhotosContainer::~PhotosContainer()
 
     delete m_quick;
     m_quick = nullptr;
+}
+
+QVariantList PhotosContainer::thumbnailSizes() const
+{
+    QVariantList sizes;
+
+    for (const int size : m_broker->sizes())
+    {
+        sizes << size;
+    }
+
+    return sizes;
+}
+
+int PhotosContainer::preparingPercent() const
+{
+    return m_preparingPercent;
 }
 
 bool PhotosContainer::photosActive() const

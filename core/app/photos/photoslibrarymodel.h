@@ -125,11 +125,14 @@ public:
     Q_INVOKABLE QString   dateTextAt(int row)                   const;
     Q_INVOKABLE bool      isVideoAt(int row)                    const;
     Q_INVOKABLE bool      isFavoriteAt(int row)                 const;
-    Q_INVOKABLE QString   thumbSourceAt(int row)                const;
+    Q_INVOKABLE QString   thumbSourceAt(int row, int size)      const;
     Q_INVOKABLE QString   previewSourceAt(int row, int size)    const;
     Q_INVOKABLE void      toggleFavoriteAt(int row);
     Q_INVOKABLE bool      addToAlbum(int row, const QString& albumName);
     Q_INVOKABLE void      removeFromCurrentAlbum(int row);
+
+    /// Size used for the ThumbSourceRole of the model (QML passes sizes explicitly).
+    void                  setDefaultThumbnailSize(int size);
 
     /// Called when a thumbnail file changed on disk: makes tiles request it again.
     void                  invalidateThumbnail(const QString& filePath);
@@ -210,6 +213,7 @@ private:
     bool                                 m_pending     = false;
 
     QHash<QString, int>                  m_thumbVersion;
+    int                                  m_defaultThumbSize  = 512;
 
     QSet<qlonglong>                      m_selection;
     QSet<qlonglong>                      m_bandBase;

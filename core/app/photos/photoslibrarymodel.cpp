@@ -140,7 +140,7 @@ QVariant PhotosLibraryModel::data(const QModelIndex& index, int role) const
             return entry.filePath;
 
         case ThumbSourceRole:
-            return thumbSourceAt(index.row());
+            return thumbSourceAt(index.row(), m_defaultThumbSize);
 
         case FavoriteRole:
             return (entry.rating >= FavoriteMinRating);
@@ -507,7 +507,12 @@ bool PhotosLibraryModel::isFavoriteAt(int row) const
     return ((row >= 0) && (row < m_entries.size())) ? (m_entries.at(row).rating >= FavoriteMinRating) : false;
 }
 
-QString PhotosLibraryModel::thumbSourceAt(int row) const
+void PhotosLibraryModel::setDefaultThumbnailSize(int size)
+{
+    m_defaultThumbSize = size;
+}
+
+QString PhotosLibraryModel::thumbSourceAt(int row, int size) const
 {
     if ((row < 0) || (row >= m_entries.size()))
     {
@@ -521,6 +526,7 @@ QString PhotosLibraryModel::thumbSourceAt(int row) const
 
     return QLatin1String("image://dkthumb/") + QString::number(entry.id)                  +
            QLatin1Char('/') + QString::number(m_thumbVersion.value(entry.filePath, 0)) +
+           QLatin1Char('/') + QString::number((size > 0) ? size : m_defaultThumbSize)  +
            QLatin1Char('/') + photosEncodePath(entry.filePath);
 }
 

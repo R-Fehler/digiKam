@@ -21,6 +21,28 @@ Rectangle {
                                                     palette.windowText.b, 0.12)
     readonly property bool  selecting:      library.selectionCount > 0
 
+    // Show the background preparation only when it lasts (quick passes over
+    // an already prepared library would just flicker).
+    QtObject {
+        id: preparingShown
+        property bool value: false
+    }
+
+    Timer {
+        interval: 2000
+        running:  photosApp.preparingPercent >= 0
+        onTriggered: preparingShown.value = true
+    }
+
+    Connections {
+        target: photosApp
+
+        function onSignalPreparingChanged() {
+            if (photosApp.preparingPercent < 0)
+                preparingShown.value = false
+        }
+    }
+
     function requestTrash(row) {
         trashDialog.targetRow = row
         trashDialog.open()
@@ -78,8 +100,10 @@ Rectangle {
                     Text {
                         text:           library.loading && (library.count === 0)
                                         ? qsTr("Loading…")
-                                        : ((library.count === 1) ? qsTr("1 item")
-                                                                 : qsTr("%L1 items").arg(library.count))
+                                        : (((library.count === 1) ? qsTr("1 item")
+                                                                  : qsTr("%L1 items").arg(library.count))
+                                           + (preparingShown.value ? qsTr(" \u00B7 preparing thumbnails %1%").arg(photosApp.preparingPercent)
+                                                                   : ""))
                         color:          palette.windowText
                         opacity:        0.6
                         font.pixelSize: 12

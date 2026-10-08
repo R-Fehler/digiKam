@@ -16,6 +16,7 @@
 
 #include <QStackedWidget>
 #include <QString>
+#include <QVariantList>
 
 class QAction;
 class QTimer;
@@ -34,7 +35,13 @@ class PhotosContainer : public QStackedWidget
 {
     Q_OBJECT
 
-    Q_PROPERTY(bool photosActive READ photosActive NOTIFY signalPhotosActiveChanged)
+    Q_PROPERTY(bool         photosActive     READ photosActive     NOTIFY signalPhotosActiveChanged)
+
+    /// Thumbnail sizes served (ascending, device pixels): tiles pick the one matching their size.
+    Q_PROPERTY(QVariantList thumbnailSizes   READ thumbnailSizes   CONSTANT)
+
+    /// Background thumbnail generation progress in percent, or -1 when idle.
+    Q_PROPERTY(int          preparingPercent READ preparingPercent NOTIFY signalPreparingChanged)
 
 public:
 
@@ -45,6 +52,9 @@ public:
     void     setPhotosActive(bool active);
     QAction* toggleAction() const;
 
+    QVariantList thumbnailSizes()   const;
+    int          preparingPercent() const;
+
     // --- Helpers callable from QML ("photosApp") ---
 
     Q_INVOKABLE void switchToClassic();
@@ -54,6 +64,7 @@ public:
 Q_SIGNALS:
 
     void signalPhotosActiveChanged();
+    void signalPreparingChanged();
 
 protected:
 
@@ -79,6 +90,7 @@ private:
     QAction*               m_toggle      = nullptr;
     QTimer*                m_pregenTimer = nullptr;
     int                    m_pregeneratedCount = -1;
+    int                    m_preparingPercent  = -1;
 };
 
 } // namespace Digikam

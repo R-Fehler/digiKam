@@ -82,6 +82,50 @@ Setup: an empty thumbnail database (every thumbnail generated from the 12 MP JPE
 
 Generation from full-size camera files is CPU bound. On this machine, 4 loaders are about 2.5× faster than the single loader of the first MVP. Machines with more cores should scale further, up to the cap of 6. Once pre-generation has run once, scrolling anywhere in the library is instant.
 
+## Round 3: touch input, scaling to many cores, thumbnail size ladder
+
+### Touch screens
+
+The grid's mouse layer now ignores events synthesized from touch, so finger input reaches the list and dedicated touch handlers:
+
+- finger drag scrolls (flick);
+- tap opens a photo, or toggles it while a selection exists;
+- long press selects; keeping the finger down and dragging extends the selection in order, with auto-scroll at the edges;
+- pinch zooms.
+
+The viewer already used touch-capable handlers (swipe, pinch, double tap).
+
+**Not tested:** the test environment has no touch device. Mouse behaviour was re-checked after the change.
+
+### Many cores
+
+- **Loaders for visible thumbnails:** one per core, from 2 to 16 (was capped at 6). Override with `DIGIKAM_PHOTOS_THUMB_THREADS`.
+- **Background pre-generation:** up to one loader per core, from 1 to 16, at the lowest priority. Override with `DIGIKAM_PHOTOS_PREGEN_THREADS`.
+- **Shared thread pool:** digiKam's loaders all run on one pool of cores + 1 threads, and a loader keeps its pool thread until its queue is empty. Long pre-generation queues would therefore hold the pool and delay visible thumbnails. For this reason the broker hands out pre-generation in batches of 8 photos per loader, only while no visible thumbnail is waiting and the user has not scrolled for 0.5 s. It also pauses running batches as soon as a visible thumbnail is requested; interrupted batches are queued again.
+- **Progress:** while pre-generation runs for more than 2 s, the title shows "· preparing thumbnails N%".
+
+Measured on the 4-core container (empty thumbnail database, 20 columns, 2 runs):
+
+| | First screen | After fast scroll | Whole library pre-generated |
+|---|---|---|---|
+| Round 2 (1 continuous pre-generation thread) | 7.2 s | 4.1 s | about 55 s |
+| Round 3 (batched, paused for visible work) | 7.4–8.3 s | 2.6–3.0 s | 56–58 s |
+
+Visible loading after scrolling is faster because it no longer competes with pre-generation. On machines with more than 6 cores, both visible loading and pre-generation can now use the extra cores. Use `streamline/scripts/coldbench.sh` with different `DIGIKAM_PHOTOS_THUMB_THREADS` values to find where your machine stops scaling. Likely limits are the serialized Exiv2 metadata reading and the single SQLite writer.
+
+### Thumbnail size ladder
+
+Thumbnails are served in fixed sizes: 192 px, 512 px, and on HiDPI screens 1024 px. Each tile picks the smallest size whose short side still covers it after the square crop. Small sizes are scaled from a larger one already in memory when available, otherwise digiKam's loader scales the stored thumbnail on its worker thread. When zooming across a size boundary, the old texture stays visible until the new size has loaded. The switch `DIGIKAM_PHOTOS_SINGLE_SIZE=1` restores the previous single-size behaviour for comparison.
+
+Process memory after scrolling the whole library (2,988 photos) at 26 columns, with a warm thumbnail database. Rendering is software-only here, so textures live in process memory:
+
+| | After start | After scrolling the whole library |
+|---|---|---|
+| Single 512 px size | 1,238 MB | 2,897 MB |
+| Size ladder | 572 MB | 1,051 MB |
+
+Zooming from 26 to 9 columns (crossing from 192 px to 512 px) showed no placeholder pixels, neither immediately nor after 1.5 s.
+
 ## Bugs found and fixed while testing
 
 - The grid kept a mid-library scroll position while the first collection scan was still adding photos. It now stays at the top when it is at the top.
@@ -101,8 +145,8 @@ These are only indicative: there was no GPU and the CPU was shared with the buil
 ## Known gaps and next steps
 
 1. **Sharing and export** of selected photos: copy to a folder, email, and the existing export plugins.
-2. **Touchscreens.** The grid's mouse handling takes touch input, so touch flicking in the grid is currently not possible. Mouse wheel and touchpad scrolling work.
-3. **Pre-generation progress.** Show a discreet "Preparing your library…" indicator while background generation runs.
+2. **Touch testing** on a real touch screen (implemented, untested).
+3. **Memory budget.** The decoded-thumbnail cache (up to 512 MB) and Qt Quick's own texture cache partly duplicate each other. The budget could follow available RAM instead.
 4. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
 5. **Import sheet** for phones and cards, with automatic `YYYY/MM` folders.
 6. **People and Places** views using the existing face tags and GPS data.

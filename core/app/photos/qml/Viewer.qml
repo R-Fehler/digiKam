@@ -113,7 +113,9 @@ FocusScope {
             Image {
                 id: thumbLayer
                 anchors.fill: parent
-                source:       (library.revision >= 0) ? library.thumbSourceAt(viewer.index) : ""
+                source:       (library.revision >= 0)
+                              ? library.thumbSourceAt(viewer.index, photosApp.thumbnailSizes[photosApp.thumbnailSizes.length - 1])
+                              : ""
                 fillMode:     Image.PreserveAspectFit
                 asynchronous: true
                 smooth:       true

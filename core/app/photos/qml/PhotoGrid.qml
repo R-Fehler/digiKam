@@ -10,6 +10,12 @@
 //   double click          open the photo
 //   right click           context menu
 //   Ctrl + wheel / pinch  zoom (number of columns)
+//
+// Touch screens (handled separately, the mouse overlay ignores touch):
+//   finger drag           scroll (flick)
+//   tap                   open the photo (or toggle it when a selection exists)
+//   long press            select; keep the finger down and drag to extend
+//   pinch                 zoom
 
 import QtQuick
 import QtQuick.Controls.Basic
@@ -39,6 +45,12 @@ FocusScope {
     property int  restoreIndex:  -1
     property bool scrollToTop:   false
     property int  hoverPhoto:    -1
+
+    // Touch selection: long press, then drag.
+    property bool touchSelecting: false
+    property int  touchAnchor:    -1
+    property real touchX:         0
+    property real touchY:         0
 
     // --- Zoom -----------------------------------------------------------------
 
@@ -81,6 +93,31 @@ FocusScope {
         zoomScale.origin.y = anchorY
         zoomAnimation.from = oldCell / cell
         zoomAnimation.restart()
+    }
+
+    // Converts a position in the list content item to the visible view.
+    function contentToView(contentPosition) {
+        return list.mapFromItem(list.contentItem, contentPosition.x, contentPosition.y)
+    }
+
+    // Selects the photos from the touch anchor to the photo under (x, y), in order.
+    function extendTouchSelection(x, y) {
+        const photo = photoAtView(x, y)
+
+        if ((photo < 0) || (touchAnchor < 0))
+            return
+
+        let rows = []
+
+        for (let i = Math.min(touchAnchor, photo) ; i <= Math.max(touchAnchor, photo) ; ++i)
+            rows.push(i)
+
+        library.updateBandSelection(rows)
+    }
+
+    function endTouchSelection() {
+        touchSelecting   = false
+        list.interactive = true
     }
 
     // Converts a position in the list content item to a y in the visible view.
@@ -290,6 +327,68 @@ FocusScope {
                 }
             }
         }
+
+        // Touch: a tap opens, a long press selects. Finger drags are left to the
+        // list (flicking) until a long press turned them into a selection drag.
+
+        TapHandler {
+            acceptedDevices: PointerDevice.TouchScreen
+
+            onTapped: (eventPoint) => {
+                if (gridRoot.touchSelecting)
+                    return
+
+                const p     = gridRoot.contentToView(eventPoint.position)
+                const photo = gridRoot.photoAtView(p.x, p.y)
+
+                if (photo < 0)
+                    return
+
+                if (gridRoot.selectionMode)
+                    library.toggleSelectedAt(photo)
+                else
+                    gridRoot.openPhoto(photo)
+            }
+
+            onLongPressed: {
+                const p     = gridRoot.contentToView(point.position)
+                const photo = gridRoot.photoAtView(p.x, p.y)
+
+                if (photo < 0)
+                    return
+
+                if (!library.isSelectedAt(photo))
+                    library.toggleSelectedAt(photo)
+
+                gridRoot.touchAnchor    = photo
+                gridRoot.touchX         = p.x
+                gridRoot.touchY         = p.y
+                gridRoot.touchSelecting = true
+                list.interactive        = false      // the finger now selects instead of scrolling
+                library.beginBandSelection(true)
+            }
+        }
+
+        // Follows the finger after a long press (passive: never steals the touch).
+
+        PointHandler {
+            acceptedDevices: PointerDevice.TouchScreen
+
+            onPointChanged: {
+                if (!gridRoot.touchSelecting || !active)
+                    return
+
+                const p = gridRoot.contentToView(point.position)
+                gridRoot.touchX = p.x
+                gridRoot.touchY = p.y
+                gridRoot.extendTouchSelection(p.x, p.y)
+            }
+
+            onActiveChanged: {
+                if (!active && gridRoot.touchSelecting)
+                    gridRoot.endTouchSelection()
+            }
+        }
     }
 
     // --- Mouse: clicks, selection, drag-select, context menu ---------------------
@@ -321,6 +420,12 @@ FocusScope {
         }
 
         onPressed: (mouse) => {
+            // Touch screens: let the list flick, the touch handlers do the rest.
+            if (mouse.source !== Qt.MouseEventNotSynthesized) {
+                mouse.accepted = false
+                return
+            }
+
             gridRoot.forceActiveFocus()
 
             pressX      = mouse.x
@@ -424,23 +529,28 @@ FocusScope {
         Timer {
             interval: 16
             repeat:   true
-            running:  pointer.banding
+            running:  pointer.banding || gridRoot.touchSelecting
 
             onTriggered: {
                 const margin = 48
+                const y      = gridRoot.touchSelecting ? gridRoot.touchY : pointer.lastY
                 let speed    = 0
 
-                if (pointer.lastY < margin)
-                    speed = -Math.min(40, (margin - pointer.lastY) / 2)
-                else if (pointer.lastY > pointer.height - margin)
-                    speed = Math.min(40, (pointer.lastY - (pointer.height - margin)) / 2)
+                if (y < margin)
+                    speed = -Math.min(40, (margin - y) / 2)
+                else if (y > pointer.height - margin)
+                    speed = Math.min(40, (y - (pointer.height - margin)) / 2)
 
                 if (speed === 0)
                     return
 
                 const maxY    = list.originY + list.contentHeight - list.height
                 list.contentY = Math.max(list.originY, Math.min(maxY, list.contentY + speed))
-                pointer.updateBand()
+
+                if (gridRoot.touchSelecting)
+                    gridRoot.extendTouchSelection(gridRoot.touchX, gridRoot.touchY)
+                else
+                    pointer.updateBand()
             }
         }
     }

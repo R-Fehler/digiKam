@@ -3,6 +3,7 @@
 // interaction is handled by the grid (selection, drag-select, open).
 
 import QtQuick
+import QtQuick.Window
 
 Item {
     id: tile
@@ -18,7 +19,29 @@ Item {
     property bool armed:         nearView
 
     onNearViewChanged:   if (nearView) armed = true
-    onPhotoIndexChanged: armed = nearView
+    onPhotoIndexChanged: {
+        armed       = nearView
+        shownSource = ""        // never show the previous photo of a recycled tile
+    }
+
+    // Smallest served thumbnail size whose short side still covers the tile
+    // after the square crop (4:3 photos: short side = 0.75 x long side).
+    readonly property real physicalSize: Math.max(width, height) * Screen.devicePixelRatio
+    readonly property int  thumbSize: {
+        const sizes = photosApp.thumbnailSizes
+        for (let i = 0 ; i < sizes.length ; ++i) {
+            if (sizes[i] * 0.75 >= physicalSize)
+                return sizes[i]
+        }
+        return sizes[sizes.length - 1]
+    }
+
+    readonly property string wantedSource: (armed && (library.revision >= 0))
+                                           ? library.thumbSourceAt(photoIndex, thumbSize) : ""
+
+    // The source on screen only switches once the wanted one is loaded: when
+    // zooming across a size boundary, the old texture stays until the new one is ready.
+    property string shownSource: ""
 
     // Re-evaluated when favorites / selection change (revisions are bumped).
     readonly property bool favorite: (library.revision >= 0) && library.isFavoriteAt(photoIndex)
@@ -54,7 +77,7 @@ Item {
 
             // Thumbnails are requested at their stored size once; zooming the grid
             // only rescales the texture on the GPU, it never reloads.
-            source:       (tile.armed && (library.revision >= 0)) ? library.thumbSourceAt(tile.photoIndex) : ""
+            source:       tile.shownSource
             asynchronous: true
             cache:        true
             fillMode:     Image.PreserveAspectCrop
@@ -64,6 +87,19 @@ Item {
 
             Behavior on opacity {
                 NumberAnimation { duration: 120 }
+            }
+        }
+
+        // Loads the wanted size off screen, then makes it the shown one.
+        Image {
+            visible:      false
+            asynchronous: true
+            cache:        true
+            source:       (tile.wantedSource !== tile.shownSource) ? tile.wantedSource : ""
+
+            onStatusChanged: {
+                if (status === Image.Ready)
+                    tile.shownSource = source
             }
         }
 
