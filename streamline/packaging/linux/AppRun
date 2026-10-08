@@ -18,8 +18,14 @@ for hook in "${HERE}"/apprun-hooks/*.sh ; do
     [ -f "${hook}" ] && source "${hook}"
 done
 
+export PATH="${HERE}/usr/bin:${PATH}"           # Bundled ExifTool.
 export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-export DK_PLUGIN_PATH="${HERE}/usr/plugins/digikam"
+
+# digiKam and its geolocation engine find their plugins below the Qt plugin
+# directory (usr/plugins, see usr/bin/qt.conf). DK_PLUGIN_PATH must stay unset:
+# with it, the geolocation engine does not look into usr/plugins/digikam/marble.
+
+unset DK_PLUGIN_PATH
 
 # Bundled Qt WebEngine (used by the web service tools and the help browser).
 

@@ -31,7 +31,9 @@
 #    and Marble does not build on macOS with the current Craft cache;
 #  - libs/libusb only where libgphoto2 uses it (not on Windows, where it does
 #    not compile with current MSVC because of /WX);
-#  - no Marble file shuffling in the Windows bundle.
+#  - no Marble file shuffling in the Windows bundle;
+#  - Qt modules this digiKam needs: qtscxml (StateMachine), qtmultimedia,
+#    qtdeclarative (Qt Quick, for Photos mode).
 
 import os
 
@@ -100,6 +102,13 @@ class subinfo(info.infoclass):
         self.runtimeDependencies["libs/qt/qtsvg"] = None
         self.runtimeDependencies["libs/qt/qtimageformats"] = None
         self.runtimeDependencies["libs/qt/qtnetworkauth"] = None
+
+        # StateMachine (required since digiKam 9), Multimedia (media player),
+        # Qt Quick (Photos mode).
+
+        self.runtimeDependencies["libs/qt/qtscxml"] = None
+        self.runtimeDependencies["libs/qt/qtmultimedia"] = None
+        self.runtimeDependencies["libs/qt/qtdeclarative"] = None
 
         if CraftCore.compiler.isMinGW():
             # mingw-based builds need this

@@ -25,17 +25,24 @@ HERE="$(cd "$(dirname "$(readlink -f "${0}")")" && pwd)"
 SRC_DIR="$(cd "${HERE}/../../.." && pwd)"
 WORK_DIR="${WORK_DIR:-${OUT_DIR}/work}"
 APPDIR="${WORK_DIR}/AppDir"
-ARCH="$(uname -m)"
+export ARCH="$(uname -m)"        # Also read by appimagetool.
 
 echo "--- Installing into the AppDir"
 
-rm -rf "${APPDIR}"
+# KDE's install directories are absolute paths below the configured prefix:
+# install with DESTDIR, then move the prefix to usr/.
+
+PREFIX="$(sed -n 's/^CMAKE_INSTALL_PREFIX:PATH=//p' "${BUILD_DIR}/CMakeCache.txt")"
+
+rm -rf "${APPDIR}" "${WORK_DIR}/root"
 mkdir -p "${APPDIR}"
-cmake --install "${BUILD_DIR}" --prefix "${APPDIR}/usr" > "${WORK_DIR}/install.log"
+DESTDIR="${WORK_DIR}/root" cmake --install "${BUILD_DIR}" > "${WORK_DIR}/install.log"
+mv "${WORK_DIR}/root${PREFIX}" "${APPDIR}/usr"
+rm -rf "${WORK_DIR}/root"
 
 # digiKam plugins: below the Qt plugin directory of the bundle (usr/plugins,
-# see the qt.conf written by linuxdeploy-plugin-qt). AppRun also points
-# DK_PLUGIN_PATH there.
+# see the qt.conf written by linuxdeploy-plugin-qt), where digiKam looks
+# for them by default.
 
 PLUGINS_SRC="$(find "${APPDIR}/usr" -type d -path "*/plugins/digikam" | head -n1)"
 
@@ -54,6 +61,17 @@ fi
 
 cp "${SRC_DIR}/project/bundles/common/breeze.rcc"      "${APPDIR}/usr/share/digikam/"
 cp "${SRC_DIR}/project/bundles/common/breeze-dark.rcc" "${APPDIR}/usr/share/digikam/"
+
+# ExifTool (Perl, the system's perl runs it), as in the official bundles.
+
+mkdir -p "${WORK_DIR}/exiftool"
+curl -sSfL -o "${WORK_DIR}/exiftool/Image-ExifTool.tar.gz" \
+     "https://files.kde.org/digikam/exiftool/Image-ExifTool.tar.gz"
+tar -xzf "${WORK_DIR}/exiftool/Image-ExifTool.tar.gz" -C "${WORK_DIR}/exiftool"
+mv "$(find "${WORK_DIR}/exiftool" -maxdepth 1 -type d -name "Image-ExifTool-*" | head -n1)" \
+   "${APPDIR}/usr/bin/Image-ExifTool"
+ln -s Image-ExifTool/exiftool "${APPDIR}/usr/bin/exiftool"
+rm -rf "${WORK_DIR}/exiftool"
 
 # Desktop entry of the bundle: Photos mode.
 
