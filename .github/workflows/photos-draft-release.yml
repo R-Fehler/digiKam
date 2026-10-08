@@ -4,11 +4,11 @@
 #
 #   git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
 #
-# Does not rebuild: takes the packages (Linux AppImage, and the Windows / macOS
-# packages when their jobs succeeded) of the newest "Photos build and release"
-# run whose commit is the tagged commit or one of its ancestors, waiting for it
-# when it is still running. The release is created as a draft: review the
-# notes and assets on GitHub, then publish it.
+# Does not rebuild: uses the newest "Photos build and release" run whose commit
+# is the tagged commit or one of its ancestors (later commits that only touch
+# docs do not start a build). The draft is created as soon as that run's Linux
+# AppImage is ready; the Windows / macOS packages are added when their jobs
+# succeed. Review the draft on GitHub, then publish it.
 
 name: Photos draft release
 
@@ -24,7 +24,7 @@ permissions:
 jobs:
   draft:
     runs-on: ubuntu-24.04
-    timeout-minutes: 350
+    timeout-minutes: 355
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -33,59 +33,47 @@ jobs:
       - name: Find the build of the tagged commit
         id: build
         run: |
-          for attempt in $(seq 1 66); do
-            run_id=""
-            while read -r id sha status conclusion; do
-              # The build's commit must be the tagged commit or an ancestor of it.
-              rel=$(gh api "repos/${GH_REPO}/compare/${sha}...${GITHUB_SHA}" --jq .status 2>/dev/null || true)
-              if [ "${rel}" = "identical" ] || [ "${rel}" = "ahead" ]; then
-                run_id="${id}"; run_status="${status}"; run_conclusion="${conclusion}"; run_sha="${sha}"
-                break
-              fi
-            done < <(gh run list --workflow photos-release.yml --event push --limit 30 \
-                       --json databaseId,headSha,status,conclusion \
-                       --jq '.[] | "\(.databaseId) \(.headSha) \(.status) \(.conclusion)"')
-
-            if [ -z "${run_id}" ]; then
-              echo "::error::No build of ${GITHUB_SHA} or of an ancestor found"
-              exit 1
-            fi
-
-            if [ "${run_status}" = "completed" ]; then
-              if [ "${run_conclusion}" != "success" ]; then
-                echo "::error::Build run ${run_id} (${run_sha}) concluded ${run_conclusion}"
-                exit 1
-              fi
-              echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
-              echo "run_sha=${run_sha}" >> "$GITHUB_OUTPUT"
-              echo "Using build run ${run_id} of ${run_sha}"
+          while read -r id sha; do
+            # The build's commit must be the tagged commit or an ancestor of it.
+            rel=$(gh api "repos/${GH_REPO}/compare/${sha}...${GITHUB_SHA}" --jq .status 2>/dev/null || true)
+            if [ "${rel}" = "identical" ] || [ "${rel}" = "ahead" ]; then
+              echo "run_id=${id}" >> "$GITHUB_OUTPUT"
+              echo "run_sha=${sha}" >> "$GITHUB_OUTPUT"
+              echo "Using build run ${id} of ${sha}"
               exit 0
             fi
-
-            echo "Build run ${run_id} (${run_sha}) is ${run_status}, waiting..."
-            sleep 300
-          done
-          echo "::error::Timed out waiting for the build"
+          done < <(gh run list --workflow photos-release.yml --event push --limit 30 \
+                     --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')
+          echo "::error::No build of ${GITHUB_SHA} or of an ancestor found"
           exit 1
 
-      - name: Download its packages
+      - name: Wait for the Linux AppImage
+        env:
+          RUN_ID: ${{ steps.build.outputs.run_id }}
         run: |
-          mkdir dist
-          for name in linux-appimage windows-installer macos-dmg; do
-            gh run download "${{ steps.build.outputs.run_id }}" --name "${name}" --dir dist \
-              || echo "No ${name} package in this build"
+          while true; do
+            read -r status conclusion < <(gh run view "${RUN_ID}" --json jobs \
+              --jq '.jobs[] | select(.name == "linux") | "\(.status) \(.conclusion)"')
+            if [ "${status}" = "completed" ]; then
+              [ "${conclusion}" = "success" ] && exit 0
+              echo "::error::The Linux job of run ${RUN_ID} concluded ${conclusion}"
+              exit 1
+            fi
+            echo "Linux job: ${status:-not started}, waiting..."
+            sleep 120
           done
-          ls -la dist
-          ls dist/*.AppImage > /dev/null
 
       - name: Create the draft release
+        env:
+          RUN_ID: ${{ steps.build.outputs.run_id }}
+          RUN_SHA: ${{ steps.build.outputs.run_sha }}
         run: |
-          version="${TAG#photos-v}"
-          sha="${{ steps.build.outputs.run_sha }}"
-          run_url="https://github.com/${GH_REPO}/actions/runs/${{ steps.build.outputs.run_id }}"
-          has() { ls dist/$1 > /dev/null 2>&1 && echo "yes" || echo "not in this release"; }
-
-          cat > notes.md <<EOF
+          mkdir -p dist
+          gh run download "${RUN_ID}" --name linux-appimage --dir dist
+          streamline_notes() {
+            local version="${TAG#photos-v}"
+            has() { ls dist/$1 > /dev/null 2>&1 && echo "yes" || echo "not (yet) in this release"; }
+            cat <<EOF
           digiKam with **Photos mode**, a streamlined photo library view in the style of Apple Photos / Google Photos, built on top of stock digiKam ${version%%-*}.
 
           Photos mode works on the same database, thumbnails and files as stock digiKam: you can switch between the two at any time (Ctrl+Shift+P), and go back to stock digiKam without migrating anything. Photos mode keeps its own settings file (\`digikam-photosrc\`), copied from \`digikamrc\` the first time.
@@ -107,10 +95,35 @@ jobs:
           - Back up your digiKam database before trying a preview build.
           - Do not run stock digiKam and digiKam Photos at the same time on the same database.
 
-          Built from ${sha} (${run_url}).
+          Built from ${RUN_SHA} (https://github.com/${GH_REPO}/actions/runs/${RUN_ID}).
           EOF
-
+          }
+          declare -f streamline_notes > notes-fn.sh
+          streamline_notes > notes.md
           gh release create "${TAG}" dist/* --draft --prerelease --verify-tag \
-             --title "digiKam Photos ${version}" --notes-file notes.md
+             --title "digiKam Photos ${TAG#photos-v}" --notes-file notes.md
 
-          echo "Draft created: https://github.com/${GH_REPO}/releases (visible to maintainers until published)"
+      - name: Add the Windows and macOS packages
+        env:
+          RUN_ID: ${{ steps.build.outputs.run_id }}
+          RUN_SHA: ${{ steps.build.outputs.run_sha }}
+        run: |
+          until [ "$(gh run view "${RUN_ID}" --json status --jq .status)" = "completed" ]; do
+            echo "Waiting for the Windows and macOS jobs..."
+            sleep 300
+          done
+          added=0
+          for name in windows-installer macos-dmg; do
+            if gh run download "${RUN_ID}" --name "${name}" --dir "extra-${name}"; then
+              gh release upload "${TAG}" extra-${name}/* --clobber
+              cp extra-${name}/* dist/
+              added=1
+            else
+              echo "No ${name} package in run ${RUN_ID}"
+            fi
+          done
+          if [ "${added}" = "1" ]; then
+            source notes-fn.sh
+            streamline_notes > notes.md
+            gh release edit "${TAG}" --notes-file notes.md
+          fi

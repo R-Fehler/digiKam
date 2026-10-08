@@ -21,10 +21,11 @@ To make a release:
 git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
 ```
 
-`.github/workflows/photos-draft-release.yml` then waits for the build of the
+`.github/workflows/photos-draft-release.yml` then picks the build of the
 tagged commit, or of its newest built ancestor when the later commits only
-touched docs. It takes that build's packages and creates a draft
-pre-release with generated notes. Review it on the GitHub releases page and
+touched docs. As soon as that build's Linux AppImage is ready, it creates a
+draft pre-release with generated notes. It adds the Windows and macOS packages
+when those jobs succeed. Review the draft on the GitHub releases page and
 publish it. The packages keep their build names
 (`digiKam-Photos-<version>-photos-<date>-<commit>-x86_64.AppImage`).
 

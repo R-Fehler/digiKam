@@ -33,7 +33,8 @@
 #    not compile with current MSVC because of /WX);
 #  - no Marble file shuffling in the Windows bundle;
 #  - Qt modules this digiKam needs: qtscxml (StateMachine), qtmultimedia,
-#    qtdeclarative (Qt Quick, for Photos mode).
+#    qtdeclarative (Qt Quick, for Photos mode);
+#  - libs/boost (Boost Graph, now required) and libs/libheif (HEIC photos).
 
 import os
 
@@ -80,9 +81,13 @@ class subinfo(info.infoclass):
             self.runtimeDependencies["libs/libgphoto2"] = None
             self.runtimeDependencies["libs/libusb-compat"] = None
 
-        # do not force boost deps (see: https://phabricator.kde.org/T12071#212690)
+        # Boost Graph (header only) is required since digiKam 9.
 
-        # self.runtimeDependencies["libs/boost"]                         = None
+        self.buildDependencies["libs/boost"] = None
+
+        # HEIF/HEIC (phone photos).
+
+        self.runtimeDependencies["libs/libheif"] = None
 
         self.runtimeDependencies["libs/expat"] = None
         self.runtimeDependencies["libs/lcms2"] = None
