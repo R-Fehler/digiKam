@@ -19,6 +19,7 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -55,6 +56,11 @@ class PhotosLibraryModel : public QAbstractListModel
 
     /// Incremented whenever per-photo flags change: lets QML bindings refresh.
     Q_PROPERTY(int          revision     READ revision     NOTIFY revisionChanged)
+
+    /// Selection, kept by image id so that it survives reloads.
+    Q_PROPERTY(int          selectionCount    READ selectionCount    NOTIFY selectionChanged)
+    Q_PROPERTY(int          selectionRevision READ selectionRevision NOTIFY selectionChanged)
+    Q_PROPERTY(bool         canUndoTrash      READ canUndoTrash      NOTIFY canUndoTrashChanged)
 
 public:
 
@@ -102,6 +108,9 @@ public:
     QString      title()      const;
     QVariantList albums()     const;
     int          revision()   const;
+    int          selectionCount()    const;
+    int          selectionRevision() const;
+    bool         canUndoTrash()      const;
 
     const QList<PhotosEntry>& entries() const;
 
@@ -122,6 +131,34 @@ public:
     Q_INVOKABLE bool      addToAlbum(int row, const QString& albumName);
     Q_INVOKABLE void      removeFromCurrentAlbum(int row);
 
+    /// Called when a thumbnail file changed on disk: makes tiles request it again.
+    void                  invalidateThumbnail(const QString& filePath);
+
+    // --- Selection ---
+
+    Q_INVOKABLE bool       isSelectedAt(int row)                const;
+    Q_INVOKABLE void       toggleSelectedAt(int row);
+    Q_INVOKABLE void       selectRangeTo(int row);
+    Q_INVOKABLE void       selectOnly(int row);
+    Q_INVOKABLE void       selectAll();
+    Q_INVOKABLE void       clearSelection();
+    Q_INVOKABLE void       beginBandSelection(bool additive);
+    Q_INVOKABLE void       updateBandSelection(const QList<int>& rows);
+    Q_INVOKABLE QList<int> selectedRows()                       const;
+
+    // --- Actions on the selection ---
+
+    Q_INVOKABLE bool       selectionAllFavorite()               const;
+    Q_INVOKABLE void       setFavoriteForSelection(bool favorite);
+    Q_INVOKABLE bool       addSelectionToAlbum(const QString& albumName);
+    Q_INVOKABLE void       removeSelectionFromCurrentAlbum();
+
+    // --- Move to trash (digiKam's collection trash, restorable) ---
+
+    Q_INVOKABLE void       trashSelection();
+    Q_INVOKABLE void       trashAt(int row);
+    Q_INVOKABLE void       undoTrash();
+
 Q_SIGNALS:
 
     void countChanged();
@@ -129,6 +166,11 @@ Q_SIGNALS:
     void filterChanged();
     void albumsChanged();
     void revisionChanged();
+    void selectionChanged();
+    void canUndoTrashChanged();
+
+    /// Emitted when photos were moved to the trash by this model.
+    void trashed(int count);
 
     /// Emitted before the content is replaced by a reload, then after it.
     void aboutToReload();
@@ -148,11 +190,15 @@ private:
     static QList<PhotosEntry> queryEntries(int filter, int albumTagId);
     void refreshRatings(const QList<qlonglong>& ids);
     void scheduleReload();
+    void emitSelectionChanged();
+    int  albumTagForName(const QString& albumName);
+    void trashIds(const QList<qlonglong>& ids);
 
 private:
 
     QList<PhotosEntry>                   m_entries;
     QHash<qlonglong, int>                m_rowOfId;
+    QHash<QString, int>                  m_rowOfPath;
     QFutureWatcher<QList<PhotosEntry> >  m_watcher;
     QTimer*                              m_reloadTimer = nullptr;
     QTimer*                              m_albumsTimer = nullptr;
@@ -162,6 +208,18 @@ private:
     int                                  m_albumTagId  = -1;
     bool                                 m_loading     = false;
     bool                                 m_pending     = false;
+
+    QHash<QString, int>                  m_thumbVersion;
+
+    QSet<qlonglong>                      m_selection;
+    QSet<qlonglong>                      m_bandBase;
+    qlonglong                            m_anchorId          = -1;
+    int                                  m_selectionRevision = 0;
+
+    QSet<qlonglong>                      m_trashPending;
+    QSet<qlonglong>                      m_undoIds;
+    QSet<QString>                        m_undoRoots;
+    int                                  m_undoAttempts      = 0;
 };
 
 /// URL helpers shared by the models and the image providers.

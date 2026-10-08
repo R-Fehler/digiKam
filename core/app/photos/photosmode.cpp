@@ -94,6 +94,28 @@ void PhotosMode::preInitialize(int argc, char** argv)
         }
     }
 
+    // Photos mode defaults, applied once (the user may change them later):
+    // watch the library folders so that changes made by other applications
+    // show up, and use large thumbnails for crisp centre-cropped tiles.
+    // Only once a configuration exists: an empty "Album Settings" group would
+    // skip digiKam's first-run assistant.
+
+    if (QFile::exists(ownConfig))
+    {
+        KConfig config(ownConfig, KConfig::SimpleConfig);
+        KConfigGroup photos = config.group(QLatin1String("Photos Mode"));
+
+        if (config.hasGroup(QLatin1String("Album Settings")) &&
+            !photos.readEntry(QLatin1String("Defaults Applied"), false))
+        {
+            KConfigGroup album = config.group(QLatin1String("Album Settings"));
+            album.writeEntry(QLatin1String("Album Monitoring"), true);
+            album.writeEntry(QLatin1String("Use Large Thumbs"), true);
+            photos.writeEntry(QLatin1String("Defaults Applied"), true);
+            config.sync();
+        }
+    }
+
     KConfig::setMainConfigName(configFileName());
 }
 

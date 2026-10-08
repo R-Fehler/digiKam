@@ -20,11 +20,13 @@
 #include <QPointer>
 #include <QQuickTextureFactory>
 #include <QRunnable>
+#include <QThread>
 
 // Local includes
 
 #include "digikam_debug.h"
 #include "dimg.h"
+#include "loadingcache.h"
 #include "loadingdescription.h"
 #include "photoslibrarymodel.h"
 #include "previewloadthread.h"
@@ -34,33 +36,91 @@ namespace Digikam
 {
 
 PhotosThumbnailBroker::PhotosThumbnailBroker(QObject* const parent)
-    : QObject (parent),
-      m_thread(new ThumbnailLoadThread(this)),
-      m_size  (ThumbnailLoadThread::maximumThumbnailSize())
+    : QObject(parent),
+      m_size (ThumbnailLoadThread::maximumThumbnailSize())
 {
-    // We only want QImages: no QPixmap conversion or border painting in the GUI thread.
+    // Generating thumbnails for a library seen for the first time is CPU bound
+    // (decoding full size camera files): one loader per core, measured fastest.
+    // They run at a lowered priority so that the user interface stays fluid.
 
-    m_thread->setPixmapRequested(false);
-    m_thread->setSendSurrogatePixmap(false);
-    m_thread->setThumbnailSize(m_size);
+    int loaders = qBound(2, QThread::idealThreadCount(), 6);
+    bool ok     = false;
+    const int env = qEnvironmentVariableIntValue("DIGIKAM_PHOTOS_THUMB_THREADS", &ok);
+
+    if (ok && (env > 0))
+    {
+        loaders = qMin(env, 16);
+    }
+
+    for (int i = 0 ; i < loaders ; ++i)
+    {
+        ThumbnailLoadThread* const loader = new ThumbnailLoadThread(this);
+
+        // We only want QImages: no QPixmap conversion or border painting in the GUI thread.
+
+        loader->setPixmapRequested(false);
+        loader->setSendSurrogatePixmap(false);
+        loader->setThumbnailSize(m_size);
+        loader->setPriority(QThread::LowPriority);
+
+        connect(loader, &ThumbnailLoadThread::signalQImageThumbnailLoaded,
+                this, &PhotosThumbnailBroker::slotImageLoaded);
+
+        // Not connected to signalThumbnailLoaded(QPixmap): pixmaps coming from the
+        // shared cache of the classic views carry a painted 1 px border. A cache hit
+        // there also schedules a load, which delivers the clean QImage above.
+
+        m_loaders << loader;
+    }
+
+    m_pregenerator = new ThumbnailLoadThread(this);
+    m_pregenerator->setPixmapRequested(false);
+    m_pregenerator->setSendSurrogatePixmap(false);
+    m_pregenerator->setThumbnailSize(m_size);
+    m_pregenerator->setPriority(QThread::LowestPriority);
 
     // Cost unit is KiB: keep up to 512 MiB of decoded thumbnails,
     // i.e. about 2000 thumbnails of 256x256 or 500 of 512x512.
 
     m_cache.setMaxCost(512 * 1024);
 
-    connect(m_thread, &ThumbnailLoadThread::signalQImageThumbnailLoaded,
-            this, &PhotosThumbnailBroker::slotImageLoaded);
+    // Files modified on disk (edited, rotated...): digiKam's loading cache
+    // is notified, and so are we. May be emitted under the cache lock.
 
-    // Not connected to signalThumbnailLoaded(QPixmap): pixmaps coming from the
-    // shared cache of the classic views carry a painted 1 px border. A cache hit
-    // there also schedules a load, which delivers the clean QImage above.
+    connect(LoadingCache::cache(), &LoadingCache::fileChanged,
+            this, &PhotosThumbnailBroker::slotFileChanged,
+            Qt::QueuedConnection);
+
+    qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode: thumbnail loaders:" << loaders << "size:" << m_size;
 }
 
 PhotosThumbnailBroker::~PhotosThumbnailBroker()
 {
-    m_thread->stopAllTasks();
-    m_thread->wait();
+    m_pregenerator->stopAllTasks();
+
+    for (ThumbnailLoadThread* const loader : std::as_const(m_loaders))
+    {
+        loader->stopAllTasks();
+    }
+
+    m_pregenerator->wait();
+
+    for (ThumbnailLoadThread* const loader : std::as_const(m_loaders))
+    {
+        loader->wait();
+    }
+}
+
+int PhotosThumbnailBroker::loaderCount() const
+{
+    return m_loaders.size();
+}
+
+ThumbnailLoadThread* PhotosThumbnailBroker::loaderFor(const QString& filePath) const
+{
+    // Same file, same loader: duplicate requests are merged by the loader.
+
+    return m_loaders.at(int(qHash(filePath) % uint(m_loaders.size())));
 }
 
 QImage PhotosThumbnailBroker::cached(const QString& filePath)
@@ -85,10 +145,38 @@ void PhotosThumbnailBroker::request(const QString& filePath, qlonglong imageId)
     ThumbnailIdentifier identifier(filePath);
     identifier.id = imageId;
 
+    ++m_pending[filePath];
+
     // Asynchronous: the result arrives through the loader signals.
     // Requests are processed last-in first-out, so what is on screen now loads first.
 
-    m_thread->find(identifier, m_size);
+    loaderFor(filePath)->find(identifier, m_size);
+}
+
+void PhotosThumbnailBroker::cancel(const QString& filePath)
+{
+    auto it = m_pending.find(filePath);
+
+    if (it == m_pending.end())
+    {
+        return;
+    }
+
+    if (--it.value() <= 0)
+    {
+        // Nobody waits for it any more (the tile scrolled away): drop the task
+        // so that the loader works on what is visible. The background
+        // pre-generation will still create it later.
+
+        m_pending.erase(it);
+        loaderFor(filePath)->stopLoading(filePath);
+    }
+}
+
+void PhotosThumbnailBroker::pregenerate(const QList<ThumbnailIdentifier>& identifiers)
+{
+    m_pregenerator->stopAllTasks();
+    m_pregenerator->pregenerateGroup(identifiers, m_size);
 }
 
 void PhotosThumbnailBroker::store(const QString& filePath, const QImage& image)
@@ -104,9 +192,24 @@ void PhotosThumbnailBroker::store(const QString& filePath, const QImage& image)
 
 void PhotosThumbnailBroker::slotImageLoaded(const LoadingDescription& description, const QImage& image)
 {
+    m_pending.remove(description.filePath);
     store(description.filePath, image);
 
     Q_EMIT signalThumbnailReady(description.filePath, image);
+}
+
+void PhotosThumbnailBroker::slotFileChanged(const QString& filePath)
+{
+    {
+        QMutexLocker locker(&m_mutex);
+
+        if (!m_cache.remove(filePath))
+        {
+            return;     // Never shown by us: nothing to refresh.
+        }
+    }
+
+    Q_EMIT signalThumbnailChanged(filePath);
 }
 
 // -------------------------------------------------------------------------------
@@ -123,7 +226,8 @@ public:
     PhotosThumbnailResponse(PhotosThumbnailBroker* const broker,
                             const QString& filePath,
                             qlonglong imageId)
-        : m_filePath(filePath)
+        : m_broker  (broker),
+          m_filePath(filePath)
     {
         // Connect before looking at the cache, so a result cannot be missed.
 
@@ -169,8 +273,24 @@ public:
 
     void cancel() override
     {
-        // The loading task continues in digiKam's loader and fills the cache,
-        // which is still useful when scrolling back.
+        // The tile went away (scrolled out, recycled): let the broker drop
+        // the loading task if nobody else waits for this thumbnail.
+
+        if (!m_done)
+        {
+            QPointer<PhotosThumbnailBroker> guard(m_broker);
+            const QString filePath = m_filePath;
+
+            QMetaObject::invokeMethod(m_broker, [guard, filePath] ()
+                {
+                    if (guard)
+                    {
+                        guard->cancel(filePath);
+                    }
+                },
+                Qt::QueuedConnection
+            );
+        }
 
         m_cancelled = true;
         finish(QImage());
@@ -202,6 +322,7 @@ private:
 
 private:
 
+    QPointer<PhotosThumbnailBroker> m_broker;
     QString                 m_filePath;
     QImage                  m_image;
     QMetaObject::Connection m_connection;
@@ -266,9 +387,12 @@ PhotosThumbnailProvider::PhotosThumbnailProvider(PhotosThumbnailBroker* const br
 
 QQuickImageResponse* PhotosThumbnailProvider::requestImageResponse(const QString& id, const QSize&)
 {
-    const int separator      = id.indexOf(QLatin1Char('/'));
-    const qlonglong imageId  = id.left(separator).toLongLong();
-    const QString filePath   = photosDecodePath(id.mid(separator + 1));
+    // "<imageId>/<version>/<base64url path>": the version only makes the URL
+    // unique after a file change, it is not needed to load the thumbnail.
+
+    const QStringList parts  = id.split(QLatin1Char('/'));
+    const qlonglong imageId  = parts.value(0).toLongLong();
+    const QString filePath   = photosDecodePath(parts.value(2));
 
     return new PhotosThumbnailResponse(m_broker, filePath, imageId);
 }

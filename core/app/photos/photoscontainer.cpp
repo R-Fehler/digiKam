@@ -23,6 +23,7 @@
 #include <QQmlEngine>
 #include <QQuickWidget>
 #include <QStatusBar>
+#include <QTimer>
 #include <QUrl>
 
 // KDE includes
@@ -39,6 +40,7 @@
 #include "photoslibrarymodel.h"
 #include "photosgridmodel.h"
 #include "photosimageproviders.h"
+#include "thumbnailinfo.h"
 
 namespace Digikam
 {
@@ -92,6 +94,34 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
 
     connect(m_toggle, &QAction::triggered,
             this, &PhotosContainer::slotToggle);
+
+    // Thumbnails of files modified on disk are requested again.
+
+    connect(m_broker, &PhotosThumbnailBroker::signalThumbnailChanged,
+            m_library, &PhotosLibraryModel::invalidateThumbnail);
+
+    // Once the library is listed, generate missing thumbnails in the background,
+    // so that scrolling through a library seen for the first time stays smooth.
+
+    m_pregenTimer = new QTimer(this);
+    m_pregenTimer->setSingleShot(true);
+    m_pregenTimer->setInterval(3000);
+
+    connect(m_pregenTimer, &QTimer::timeout,
+            this, &PhotosContainer::slotPregenerate);
+
+    connect(m_library, &PhotosLibraryModel::reloaded,
+            this, [this] ()
+        {
+            if (
+                (m_library->filter() == PhotosLibraryModel::Library) &&
+                (m_library->count() != m_pregeneratedCount)
+               )
+            {
+                m_pregenTimer->start();
+            }
+        }
+    );
 
     setCurrentWidget(m_quick);
     m_library->reload();
@@ -156,9 +186,10 @@ bool PhotosContainer::eventFilter(QObject* watched, QEvent* event)
         QKeyEvent* const keyEvent         = static_cast<QKeyEvent*>(event);
         const Qt::KeyboardModifiers mods  = keyEvent->modifiers() & ~(Qt::KeypadModifier | Qt::ShiftModifier);
         const int key                     = keyEvent->key();
-        const bool zoomKey                = (key == Qt::Key_Plus) || (key == Qt::Key_Equal) || (key == Qt::Key_Minus);
+        const bool ctrlKey                = (key == Qt::Key_Plus) || (key == Qt::Key_Equal) ||
+                                            (key == Qt::Key_Minus) || (key == Qt::Key_A);
 
-        if ((mods == Qt::NoModifier) || ((mods == Qt::ControlModifier) && zoomKey))
+        if ((mods == Qt::NoModifier) || ((mods == Qt::ControlModifier) && ctrlKey))
         {
             event->accept();
 
@@ -167,6 +198,30 @@ bool PhotosContainer::eventFilter(QObject* watched, QEvent* event)
     }
 
     return QStackedWidget::eventFilter(watched, event);
+}
+
+void PhotosContainer::slotPregenerate()
+{
+    // Debug / benchmark switch.
+
+    if (qEnvironmentVariableIsSet("DIGIKAM_PHOTOS_NO_PREGEN"))
+    {
+        return;
+    }
+
+    QList<ThumbnailIdentifier> identifiers;
+    const auto& entries = m_library->entries();
+    identifiers.reserve(entries.size());
+
+    for (const PhotosEntry& entry : entries)
+    {
+        ThumbnailIdentifier identifier(entry.filePath);
+        identifier.id = entry.id;
+        identifiers << identifier;
+    }
+
+    m_pregeneratedCount = entries.size();
+    m_broker->pregenerate(identifiers);
 }
 
 void PhotosContainer::slotToggle()

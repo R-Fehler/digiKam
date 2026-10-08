@@ -21,6 +21,24 @@ FocusScope {
     readonly property bool video:       (library.revision >= 0) && library.isVideoAt(index)
 
     signal closed(int index)
+    signal requestTrash(int row)
+    signal requestAddToAlbum(int row)
+
+    // After a reload (e.g. this photo was moved to the trash) the same index
+    // shows the next photo; stay within bounds.
+    Connections {
+        target: library
+
+        function onReloaded() {
+            if (!viewer.visible)
+                return
+
+            if (library.count === 0)
+                viewer.close()
+            else if (viewer.index >= library.count)
+                viewer.index = library.count - 1
+        }
+    }
 
     function open(i) {
         index   = i
@@ -328,7 +346,7 @@ FocusScope {
                 text:      qsTr("Add to album")
                 textColor: "white"
                 pixelSize: 13
-                onClicked: albumPopup.open()
+                onClicked: viewer.requestAddToAlbum(viewer.index)
             }
 
             IconButton {
@@ -344,6 +362,13 @@ FocusScope {
                 textColor: "white"
                 pixelSize: 13
                 onClicked: photosApp.openContainingFolder(library.filePathAt(viewer.index))
+            }
+
+            IconButton {
+                text:      qsTr("Move to trash")
+                textColor: "white"
+                pixelSize: 13
+                onClicked: viewer.requestTrash(viewer.index)
             }
         }
     }
@@ -372,71 +397,6 @@ FocusScope {
         onClicked:              viewer.go(+1)
     }
 
-    // --- Add to album ---------------------------------------------------------
-
-    Popup {
-        id: albumPopup
-        anchors.centerIn: parent
-        width:            320
-        modal:            true
-        focus:            true
-        padding:          16
-
-        background: Rectangle {
-            color:  palette.window
-            radius: 10
-        }
-
-        onOpened: {
-            albumName.text = ""
-            albumName.forceActiveFocus()
-        }
-
-        onClosed: viewer.forceActiveFocus()
-
-        function add(name) {
-            if (library.addToAlbum(viewer.index, name))
-                close()
-        }
-
-        Column {
-            width:   parent.width
-            spacing: 10
-
-            Text {
-                text:           qsTr("Add to album")
-                color:          palette.windowText
-                font.pixelSize: 16
-                font.bold:      true
-            }
-
-            Repeater {
-                model: library.albums
-
-                delegate: Button {
-                    required property var modelData
-                    width:     parent.width
-                    text:      modelData.name
-                    onClicked: albumPopup.add(modelData.name)
-                }
-            }
-
-            TextField {
-                id: albumName
-                width:            parent.width
-                placeholderText:  qsTr("New album name")
-                onAccepted:       albumPopup.add(text)
-            }
-
-            Button {
-                width:     parent.width
-                text:      qsTr("Create album")
-                enabled:   albumName.text.trim().length > 0
-                onClicked: albumPopup.add(albumName.text)
-            }
-        }
-    }
-
     // --- Keyboard ---------------------------------------------------------------
 
     Keys.onPressed: (event) => {
@@ -454,6 +414,9 @@ FocusScope {
                 break
             case Qt.Key_Left:
                 viewer.go(-1)
+                break
+            case Qt.Key_Delete:
+                viewer.requestTrash(viewer.index)
                 break
             case Qt.Key_F:
             case Qt.Key_L:

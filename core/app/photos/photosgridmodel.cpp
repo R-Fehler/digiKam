@@ -273,4 +273,53 @@ int PhotosGridModel::photoForRow(int row) const
     return m_rows.at(row).first;
 }
 
+int PhotosGridModel::photoAt(int row, int column) const
+{
+    if ((row < 0) || (row >= m_rows.size()) || (column < 0))
+    {
+        return -1;
+    }
+
+    const Row& r = m_rows.at(row);
+
+    if ((r.type != PhotoRow) || (column >= r.count))
+    {
+        return -1;
+    }
+
+    return (r.first + column);
+}
+
+QList<int> PhotosGridModel::photosInBlock(int rowA, int rowB, int columnA, int columnB) const
+{
+    QList<int> photos;
+
+    if (m_rows.isEmpty())
+    {
+        return photos;
+    }
+
+    const int r0 = qBound(0, qMin(rowA, rowB), int(m_rows.size()) - 1);
+    const int r1 = qBound(0, qMax(rowA, rowB), int(m_rows.size()) - 1);
+    const int c0 = qMax(0, qMin(columnA, columnB));
+    const int c1 = qMin(m_columns - 1, qMax(columnA, columnB));
+
+    for (int r = r0 ; r <= r1 ; ++r)
+    {
+        const Row& row = m_rows.at(r);
+
+        if (row.type != PhotoRow)
+        {
+            continue;
+        }
+
+        for (int c = c0 ; (c <= c1) && (c < row.count) ; ++c)
+        {
+            photos << (row.first + c);
+        }
+    }
+
+    return photos;
+}
+
 } // namespace Digikam

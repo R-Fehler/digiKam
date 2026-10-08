@@ -44,6 +44,9 @@ done
 export XDG_DATA_DIRS="${DATA_DIR}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export DK_PLUGIN_PATH="${STAGE}/plugins"
 
+# Print Qt / digiKam logs on the terminal (Qt uses the system journal otherwise).
+export QT_FORCE_STDERR_LOGGING=1
+
 DIGIKAM_BIN="$(find "${BUILD_DIR}" -path "${STAGE}" -prune -o -type f -name digikam -perm -u+x -print | head -n1)"
 
 exec "${DIGIKAM_BIN}" "$@"

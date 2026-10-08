@@ -1,88 +1,139 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Photos mode - one square tile of the grid.
+// Photos mode - one square tile of the grid. Pure display: all mouse
+// interaction is handled by the grid (selection, drag-select, open).
 
 import QtQuick
 
 Item {
     id: tile
 
-    property int photoIndex: -1
+    property int  photoIndex:    -1
+    property bool hovered:       false
+    property bool selectionMode: false
 
-    signal activated(int photoIndex)
+    // Set by the grid: the row is on screen or within half a screen of it.
+    // Tiles further away (pre-instantiated rows) wait, so that what is on
+    // screen loads first; once requested, a thumbnail stays requested.
+    property bool nearView:      true
+    property bool armed:         nearView
 
-    // Re-evaluated when favorites change (library.revision is bumped).
+    onNearViewChanged:   if (nearView) armed = true
+    onPhotoIndexChanged: armed = nearView
+
+    // Re-evaluated when favorites / selection change (revisions are bumped).
     readonly property bool favorite: (library.revision >= 0) && library.isFavoriteAt(photoIndex)
     readonly property bool video:    (library.revision >= 0) && library.isVideoAt(photoIndex)
+    readonly property bool selected: (library.selectionRevision >= 0) && library.isSelectedAt(photoIndex)
+
+    clip: true
 
     Rectangle {
         anchors.fill: parent
-        color:        Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.08)
+        color:        tile.selected ? Qt.rgba(palette.highlight.r, palette.highlight.g, palette.highlight.b, 0.25)
+                                    : Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.08)
     }
 
-    Image {
-        id: image
-        anchors.fill: parent
+    Item {
+        id: content
 
-        // Thumbnails are requested at their stored size once; zooming the grid
-        // only rescales the texture on the GPU, it never reloads.
-        source:       (library.revision >= 0) ? library.thumbSourceAt(tile.photoIndex) : ""
-        asynchronous: true
-        cache:        true
-        fillMode:     Image.PreserveAspectCrop
-        smooth:       true
-        mipmap:       true
-        opacity:      (status === Image.Ready) ? 1.0 : 0.0
+        // Selected tiles shrink a little, Photos style.
+        property real inset: tile.selected ? Math.max(4, Math.round(tile.width * 0.07)) : 0
 
-        Behavior on opacity {
-            NumberAnimation { duration: 120 }
+        x:      inset
+        y:      inset
+        width:  tile.width  - 2 * inset
+        height: tile.height - 2 * inset
+
+        Behavior on inset {
+            NumberAnimation { duration: 90 }
         }
-    }
 
-    Rectangle {
-        anchors.fill: parent
-        color:        "black"
-        opacity:      mouse.containsMouse ? 0.12 : 0.0
-    }
+        Image {
+            id: image
+            anchors.fill: parent
 
-    // Video badge
+            // Thumbnails are requested at their stored size once; zooming the grid
+            // only rescales the texture on the GPU, it never reloads.
+            source:       (tile.armed && (library.revision >= 0)) ? library.thumbSourceAt(tile.photoIndex) : ""
+            asynchronous: true
+            cache:        true
+            fillMode:     Image.PreserveAspectCrop
+            smooth:       true
+            mipmap:       true
+            opacity:      (status === Image.Ready) ? 1.0 : 0.0
 
-    Rectangle {
-        visible:              tile.video
-        anchors.right:        parent.right
-        anchors.bottom:       parent.bottom
-        anchors.margins:      6
-        width:                22
-        height:               22
-        radius:               11
-        color:                Qt.rgba(0, 0, 0, 0.55)
+            Behavior on opacity {
+                NumberAnimation { duration: 120 }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color:        "black"
+            opacity:      (tile.hovered && !tile.selected) ? 0.12 : 0.0
+        }
+
+        // Video badge
+
+        Rectangle {
+            visible:              tile.video
+            anchors.right:        parent.right
+            anchors.bottom:       parent.bottom
+            anchors.margins:      6
+            width:                22
+            height:               22
+            radius:               11
+            color:                Qt.rgba(0, 0, 0, 0.55)
+
+            Text {
+                anchors.centerIn:               parent
+                anchors.horizontalCenterOffset: 1
+                text:                           "▶"
+                color:                          "white"
+                font.pixelSize:                 11
+            }
+        }
+
+        // Favorite badge
 
         Text {
-            anchors.centerIn:       parent
-            anchors.horizontalCenterOffset: 1
-            text:                   "▶"
-            color:                  "white"
-            font.pixelSize:         11
+            visible:            tile.favorite && (tile.width >= 60)
+            anchors.left:       parent.left
+            anchors.bottom:     parent.bottom
+            anchors.margins:    6
+            text:               "♥"
+            color:              "white"
+            style:              Text.Raised
+            styleColor:         Qt.rgba(0, 0, 0, 0.5)
+            font.pixelSize:     16
         }
     }
 
-    // Favorite badge
+    // Check circle: shown on hover, in selection mode, and on selected tiles.
+    // Clicking it (top-left corner) toggles the selection, see PhotoGrid.
 
-    Text {
-        visible:            tile.favorite && (tile.width >= 60)
-        anchors.left:       parent.left
-        anchors.bottom:     parent.bottom
-        anchors.margins:    6
-        text:               "♥"
-        color:              "white"
-        style:              Text.Raised
-        styleColor:         Qt.rgba(0, 0, 0, 0.5)
-        font.pixelSize:     16
-    }
+    Rectangle {
+        id: check
 
-    MouseArea {
-        id: mouse
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked:    tile.activated(tile.photoIndex)
+        readonly property int size: (tile.width >= 80) ? 22 : 16
+
+        visible:        (tile.width >= 40) && (tile.selected || tile.hovered || tile.selectionMode)
+        x:              6
+        y:              6
+        width:          size
+        height:         size
+        radius:         size / 2
+        color:          tile.selected ? palette.highlight : Qt.rgba(0, 0, 0, 0.25)
+        border.color:   "white"
+        border.width:   tile.selected ? 0 : 2
+
+        Text {
+            anchors.centerIn: parent
+            visible:          tile.selected
+            text:             "✓"
+            color:            palette.highlightedText
+            font.pixelSize:   check.size * 0.65
+            font.bold:        true
+        }
     }
 }

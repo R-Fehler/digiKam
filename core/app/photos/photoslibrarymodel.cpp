@@ -14,6 +14,7 @@
 
 // Qt includes
 
+#include <QDir>
 #include <QFileInfo>
 #include <QLocale>
 #include <QTimer>
@@ -33,6 +34,9 @@
 #include "coredbconstants.h"
 #include "coredbfields.h"
 #include "coredbwatch.h"
+#include "dio.h"
+#include "dtrash.h"
+#include "dtrashiteminfo.h"
 #include "fileactionmngr.h"
 #include "iteminfo.h"
 #include "tagscache.h"
@@ -391,15 +395,57 @@ void PhotosLibraryModel::slotLoaded()
     beginResetModel();
 
     m_entries = m_watcher.result();
+
+    // Photos being moved to the trash disappear at once, even if the
+    // database does not reflect it yet. Once it does, forget about them.
+
+    if (!m_trashPending.isEmpty())
+    {
+        QSet<qlonglong> stillListed;
+
+        m_entries.removeIf([this, &stillListed] (const PhotosEntry& entry)
+            {
+                if (m_trashPending.contains(entry.id))
+                {
+                    stillListed.insert(entry.id);
+
+                    return true;
+                }
+
+                return false;
+            }
+        );
+
+        m_trashPending = stillListed;
+    }
+
     m_rowOfId.clear();
     m_rowOfId.reserve(m_entries.size());
+    m_rowOfPath.clear();
+    m_rowOfPath.reserve(m_entries.size());
 
     for (int i = 0 ; i < m_entries.size() ; ++i)
     {
         m_rowOfId.insert(m_entries.at(i).id, i);
+        m_rowOfPath.insert(m_entries.at(i).filePath, i);
     }
 
     endResetModel();
+
+    // Keep only the selected photos which are still shown.
+
+    const int selected = m_selection.size();
+
+    m_selection.removeIf([this] (qlonglong id)
+        {
+            return !m_rowOfId.contains(id);
+        }
+    );
+
+    if (m_selection.size() != selected)
+    {
+        emitSelectionChanged();
+    }
 
     m_loading = false;
     ++m_revision;
@@ -470,7 +516,11 @@ QString PhotosLibraryModel::thumbSourceAt(int row) const
 
     const PhotosEntry& entry = m_entries.at(row);
 
-    return QLatin1String("image://dkthumb/") + QString::number(entry.id) +
+    // The version segment changes when the file changed on disk, so that Qt Quick
+    // does not reuse its cached texture.
+
+    return QLatin1String("image://dkthumb/") + QString::number(entry.id)                  +
+           QLatin1Char('/') + QString::number(m_thumbVersion.value(entry.filePath, 0)) +
            QLatin1Char('/') + photosEncodePath(entry.filePath);
 }
 
@@ -508,15 +558,12 @@ void PhotosLibraryModel::toggleFavoriteAt(int row)
 
 bool PhotosLibraryModel::addToAlbum(int row, const QString& albumName)
 {
-    QString name = albumName.trimmed();
-    name.replace(QLatin1Char('/'), QLatin1Char('-'));
-
-    if ((row < 0) || (row >= m_entries.size()) || name.isEmpty())
+    if ((row < 0) || (row >= m_entries.size()))
     {
         return false;
     }
 
-    const int tagId = TagsCache::instance()->getOrCreateTag(albumsRootTagName() + QLatin1Char('/') + name);
+    const int tagId = albumTagForName(albumName);
 
     if (tagId <= 0)
     {
@@ -671,6 +718,434 @@ void PhotosLibraryModel::refreshRatings(const QList<qlonglong>& ids)
 
             Q_EMIT dataChanged(idx, idx, { FavoriteRole });
         }
+    }
+}
+
+int PhotosLibraryModel::albumTagForName(const QString& albumName)
+{
+    QString name = albumName.trimmed();
+    name.replace(QLatin1Char('/'), QLatin1Char('-'));
+
+    if (name.isEmpty())
+    {
+        return 0;
+    }
+
+    return TagsCache::instance()->getOrCreateTag(albumsRootTagName() + QLatin1Char('/') + name);
+}
+
+void PhotosLibraryModel::invalidateThumbnail(const QString& filePath)
+{
+    const int row = m_rowOfPath.value(filePath, -1);
+
+    if (row < 0)
+    {
+        return;
+    }
+
+    m_thumbVersion[filePath] += 1;
+
+    const QModelIndex idx = index(row);
+
+    Q_EMIT dataChanged(idx, idx, { ThumbSourceRole });
+}
+
+// --- Selection ----------------------------------------------------------------
+
+int PhotosLibraryModel::selectionCount() const
+{
+    return m_selection.size();
+}
+
+int PhotosLibraryModel::selectionRevision() const
+{
+    return m_selectionRevision;
+}
+
+void PhotosLibraryModel::emitSelectionChanged()
+{
+    ++m_selectionRevision;
+
+    Q_EMIT selectionChanged();
+}
+
+bool PhotosLibraryModel::isSelectedAt(int row) const
+{
+    return ((row >= 0) && (row < m_entries.size())) ? m_selection.contains(m_entries.at(row).id) : false;
+}
+
+void PhotosLibraryModel::toggleSelectedAt(int row)
+{
+    if ((row < 0) || (row >= m_entries.size()))
+    {
+        return;
+    }
+
+    const qlonglong id = m_entries.at(row).id;
+
+    if (!m_selection.remove(id))
+    {
+        m_selection.insert(id);
+    }
+
+    m_anchorId = id;
+    emitSelectionChanged();
+}
+
+void PhotosLibraryModel::selectRangeTo(int row)
+{
+    const int anchor = rowOfId(m_anchorId);
+
+    if ((anchor < 0) || (row < 0) || (row >= m_entries.size()))
+    {
+        toggleSelectedAt(row);
+
+        return;
+    }
+
+    for (int i = qMin(anchor, row) ; i <= qMax(anchor, row) ; ++i)
+    {
+        m_selection.insert(m_entries.at(i).id);
+    }
+
+    emitSelectionChanged();
+}
+
+void PhotosLibraryModel::selectOnly(int row)
+{
+    m_selection.clear();
+
+    if ((row >= 0) && (row < m_entries.size()))
+    {
+        m_selection.insert(m_entries.at(row).id);
+        m_anchorId = m_entries.at(row).id;
+    }
+
+    emitSelectionChanged();
+}
+
+void PhotosLibraryModel::selectAll()
+{
+    for (const PhotosEntry& entry : std::as_const(m_entries))
+    {
+        m_selection.insert(entry.id);
+    }
+
+    emitSelectionChanged();
+}
+
+void PhotosLibraryModel::clearSelection()
+{
+    if (m_selection.isEmpty())
+    {
+        return;
+    }
+
+    m_selection.clear();
+    emitSelectionChanged();
+}
+
+void PhotosLibraryModel::beginBandSelection(bool additive)
+{
+    m_bandBase = additive ? m_selection : QSet<qlonglong>();
+}
+
+void PhotosLibraryModel::updateBandSelection(const QList<int>& rows)
+{
+    QSet<qlonglong> selection = m_bandBase;
+
+    for (const int row : rows)
+    {
+        if ((row >= 0) && (row < m_entries.size()))
+        {
+            selection.insert(m_entries.at(row).id);
+        }
+    }
+
+    if (selection != m_selection)
+    {
+        m_selection = selection;
+        emitSelectionChanged();
+    }
+}
+
+QList<int> PhotosLibraryModel::selectedRows() const
+{
+    QList<int> rows;
+
+    for (const qlonglong id : std::as_const(m_selection))
+    {
+        const int row = m_rowOfId.value(id, -1);
+
+        if (row >= 0)
+        {
+            rows << row;
+        }
+    }
+
+    std::sort(rows.begin(), rows.end());
+
+    return rows;
+}
+
+// --- Actions on the selection -------------------------------------------------
+
+bool PhotosLibraryModel::selectionAllFavorite() const
+{
+    if (m_selection.isEmpty())
+    {
+        return false;
+    }
+
+    for (const int row : selectedRows())
+    {
+        if (m_entries.at(row).rating < FavoriteMinRating)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void PhotosLibraryModel::setFavoriteForSelection(bool favorite)
+{
+    QList<ItemInfo> infos;
+
+    for (const int row : selectedRows())
+    {
+        PhotosEntry& entry = m_entries[row];
+
+        if (favorite == (entry.rating >= FavoriteMinRating))
+        {
+            continue;
+        }
+
+        entry.rating = favorite ? FavoriteRating : 0;
+        infos << ItemInfo(entry.id);
+    }
+
+    if (infos.isEmpty())
+    {
+        return;
+    }
+
+    FileActionMngr::instance()->assignRating(infos, favorite ? FavoriteRating : 0);
+
+    Q_EMIT dataChanged(index(0), index(m_entries.size() - 1), { FavoriteRole });
+}
+
+bool PhotosLibraryModel::addSelectionToAlbum(const QString& albumName)
+{
+    const QList<int> rows = selectedRows();
+
+    if (rows.isEmpty())
+    {
+        return false;
+    }
+
+    const int tagId = albumTagForName(albumName);
+
+    if (tagId <= 0)
+    {
+        return false;
+    }
+
+    QList<ItemInfo> infos;
+
+    for (const int row : rows)
+    {
+        infos << ItemInfo(m_entries.at(row).id);
+    }
+
+    FileActionMngr::instance()->assignTag(infos, tagId);
+
+    return true;
+}
+
+void PhotosLibraryModel::removeSelectionFromCurrentAlbum()
+{
+    if (m_filter != Album)
+    {
+        return;
+    }
+
+    QList<ItemInfo> infos;
+
+    for (const int row : selectedRows())
+    {
+        infos << ItemInfo(m_entries.at(row).id);
+    }
+
+    if (!infos.isEmpty())
+    {
+        FileActionMngr::instance()->removeTag(infos, m_albumTagId);
+    }
+}
+
+// --- Trash ----------------------------------------------------------------------
+
+bool PhotosLibraryModel::canUndoTrash() const
+{
+    return !m_undoIds.isEmpty();
+}
+
+void PhotosLibraryModel::trashSelection()
+{
+    QList<qlonglong> ids;
+
+    for (const int row : selectedRows())
+    {
+        ids << m_entries.at(row).id;
+    }
+
+    trashIds(ids);
+}
+
+void PhotosLibraryModel::trashAt(int row)
+{
+    if ((row >= 0) && (row < m_entries.size()))
+    {
+        trashIds(QList<qlonglong>() << m_entries.at(row).id);
+    }
+}
+
+void PhotosLibraryModel::trashIds(const QList<qlonglong>& ids)
+{
+    if (ids.isEmpty())
+    {
+        return;
+    }
+
+    // A new deletion replaces what can be undone.
+
+    m_undoIds.clear();
+    m_undoRoots.clear();
+    m_undoAttempts = 0;
+
+    QList<ItemInfo> infos;
+
+    for (const qlonglong id : ids)
+    {
+        const int row = m_rowOfId.value(id, -1);
+
+        if (row < 0)
+        {
+            continue;
+        }
+
+        infos << ItemInfo(id);
+        m_trashPending.insert(id);
+        m_undoIds.insert(id);
+        m_undoRoots.insert(CollectionManager::instance()->albumRootPath(m_entries.at(row).filePath));
+        m_selection.remove(id);
+    }
+
+    if (infos.isEmpty())
+    {
+        return;
+    }
+
+    // Same code path as the classic views: files go to the collection's
+    // .dtrash folder and can be restored from stock digiKam's trash too.
+
+    DIO::del(infos, true);
+
+    // Remove the photos from the view right away.
+
+    Q_EMIT aboutToReload();
+
+    beginResetModel();
+
+    m_entries.removeIf([this] (const PhotosEntry& entry)
+        {
+            return m_trashPending.contains(entry.id);
+        }
+    );
+
+    m_rowOfId.clear();
+    m_rowOfPath.clear();
+
+    for (int i = 0 ; i < m_entries.size() ; ++i)
+    {
+        m_rowOfId.insert(m_entries.at(i).id, i);
+        m_rowOfPath.insert(m_entries.at(i).filePath, i);
+    }
+
+    endResetModel();
+
+    ++m_revision;
+
+    Q_EMIT revisionChanged();
+    Q_EMIT countChanged();
+    Q_EMIT reloaded();
+
+    emitSelectionChanged();
+
+    Q_EMIT canUndoTrashChanged();
+    Q_EMIT trashed(infos.size());
+
+    // The trash job reports nothing when done: refresh once the database changed.
+
+    scheduleReload();
+}
+
+void PhotosLibraryModel::undoTrash()
+{
+    if (m_undoIds.isEmpty())
+    {
+        return;
+    }
+
+    // Find our items in the collection trash folders: each trash entry
+    // records the database id of the image it came from.
+
+    DTrashItemInfoList items;
+
+    for (const QString& root : std::as_const(m_undoRoots))
+    {
+        if (root.isEmpty())
+        {
+            continue;
+        }
+
+        const QDir filesDir(root + QLatin1Char('/') + DTrash::TRASH_FOLDER +
+                            QLatin1Char('/') + DTrash::FILES_FOLDER);
+
+        const auto files = filesDir.entryInfoList(QDir::Files);
+
+        for (const QFileInfo& file : files)
+        {
+            DTrashItemInfo info;
+            info.trashPath = file.filePath();
+            DTrash::extractJsonForItem(root, file.baseName(), info);
+
+            if (m_undoIds.contains(info.imageId))
+            {
+                items << info;
+            }
+        }
+    }
+
+    // The trash job may still be moving files: wait a little for the rest.
+
+    if ((items.size() < m_undoIds.size()) && (m_undoAttempts < 10))
+    {
+        ++m_undoAttempts;
+        QTimer::singleShot(300, this, &PhotosLibraryModel::undoTrash);
+
+        return;
+    }
+
+    m_undoIds.clear();
+    m_undoRoots.clear();
+    m_undoAttempts = 0;
+
+    Q_EMIT canUndoTrashChanged();
+
+    if (!items.isEmpty())
+    {
+        DIO::restoreTrash(items);
     }
 }
 

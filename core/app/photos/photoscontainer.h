@@ -18,6 +18,7 @@
 #include <QString>
 
 class QAction;
+class QTimer;
 class QQuickWidget;
 
 namespace Digikam
@@ -61,6 +62,7 @@ protected:
 private Q_SLOTS:
 
     void slotToggle();
+    void slotPregenerate();
 
 private:
 
@@ -75,6 +77,8 @@ private:
     PhotosGridModel*       m_grid        = nullptr;
     PhotosThumbnailBroker* m_broker      = nullptr;
     QAction*               m_toggle      = nullptr;
+    QTimer*                m_pregenTimer = nullptr;
+    int                    m_pregeneratedCount = -1;
 };
 
 } // namespace Digikam

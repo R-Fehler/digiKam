@@ -7,5 +7,6 @@
         <file>qml/PhotoTile.qml</file>
         <file>qml/Viewer.qml</file>
         <file>qml/IconButton.qml</file>
+        <file>qml/AlbumPopup.qml</file>
     </qresource>
 </RCC>

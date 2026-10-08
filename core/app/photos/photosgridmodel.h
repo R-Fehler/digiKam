@@ -69,6 +69,13 @@ public:
     /// First photo index shown in the given grid row (header rows map to their first photo).
     Q_INVOKABLE int photoForRow(int row)        const;
 
+    /// Photo index shown at the given column of a grid row, or -1 (header, empty cell).
+    Q_INVOKABLE int photoAt(int row, int column) const;
+
+    /// Photos in the block of grid rows [rowA, rowB] and columns [columnA, columnB]
+    /// (bounds in any order), used by drag-selection.
+    Q_INVOKABLE QList<int> photosInBlock(int rowA, int rowB, int columnA, int columnB) const;
+
 Q_SIGNALS:
 
     void columnsChanged();
