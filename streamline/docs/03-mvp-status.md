@@ -207,6 +207,7 @@ These are only indicative: there was no GPU and the CPU was shared with the buil
 ## Known gaps and next steps
 
 1. **Sharing and export** of selected photos: copy to a folder, email, and the existing export plugins.
+   Import, sidecars, devices, library views, video and the info panel are in `05-files-import-and-views.md`.
 2. **Touch testing** on a real touch screen and touchpad (implemented and tested with simulated events only).
 4. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
 5. **Import sheet** for phones and cards, with automatic `YYYY/MM` folders.
