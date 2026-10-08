@@ -173,7 +173,7 @@ jobs:
         id: craft
         run: |
           docker run --rm \
-            -e APPIMAGE_EXTRACT_AND_RUN=1 -e GITHUB_ACTIONS \
+            -e APPIMAGE_EXTRACT_AND_RUN=1 -e LDAI_NO_APPSTREAM=1 -e GITHUB_ACTIONS \
             -v "${GITHUB_WORKSPACE}:/src" -v /mnt/craft:/craft -w /src \
             almalinux:9.8 bash -c '
               set -e

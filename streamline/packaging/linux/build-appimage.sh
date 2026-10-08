@@ -100,6 +100,10 @@ done
 export PATH="${TOOLS}:${PATH}"
 export APPIMAGE_EXTRACT_AND_RUN=1          # No FUSE needed (containers, CI runners).
 
+# appimagetool validates the AppStream data online (URLs of bugs.kde.org...):
+# a network hiccup would fail the whole package.
+export LDAI_NO_APPSTREAM=1
+
 # The Qt plugin finds Qt through qmake.
 
 if [ -z "${QMAKE:-}" ] ; then
