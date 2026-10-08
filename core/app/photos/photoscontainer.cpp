@@ -17,6 +17,13 @@
 #include <QAction>
 #include <QEvent>
 #include <QFileInfo>
+#include <QFileOpenEvent>
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QKeyEvent>
 #include <QMenuBar>
 #include <QQmlContext>
@@ -45,12 +52,48 @@
 #include "photosgestures.h"
 #include "photosmetadata.h"
 #include "photosimporter.h"
+#include "photoslibraries.h"
+#include "photosmode.h"
 #include "metaenginesettings.h"
 #include "metaenginesettingscontainer.h"
 #include "thumbnailinfo.h"
 
 namespace Digikam
 {
+
+namespace
+{
+
+class PhotosFileOpenFilter : public QObject
+{
+public:
+
+    explicit PhotosFileOpenFilter(PhotosContainer* const container)
+        : QObject    (container),
+          m_container(container)
+    {
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if ((watched == qApp) && (event->type() == QEvent::FileOpen))
+        {
+            const QFileOpenEvent* const open = static_cast<QFileOpenEvent*>(event);
+            m_container->openPaths(QStringList() << (open->file().isEmpty() ? open->url().toLocalFile()
+                                                                              : open->file()));
+
+            return true;
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+
+    PhotosContainer* m_container = nullptr;
+};
+
+} // namespace
 
 PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const classicView)
     : QStackedWidget(app),
@@ -63,7 +106,8 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_previews = new PhotosPreviewLoader(this);
     m_library = new PhotosLibraryModel(this);
     m_grid    = new PhotosGridModel(m_library, this);
-    m_importer = new PhotosImporter(m_library, this);
+    m_importer  = new PhotosImporter(m_library, this);
+    m_libraries = new PhotosLibraries(this);
 
     m_filmstrip = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
                                              .readEntry("Filmstrip", true);
@@ -87,6 +131,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     context->setContextProperty(QLatin1String("grid"),      m_grid);
     context->setContextProperty(QLatin1String("photosApp"), this);
     context->setContextProperty(QLatin1String("importer"),  m_importer);
+    context->setContextProperty(QLatin1String("libraries"), m_libraries);
 
     m_quick->setSource(QUrl(QLatin1String("qrc:/photos/qml/Main.qml")));
 
@@ -165,8 +210,116 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
 
     QTimer::singleShot(10000, m_sidecarSync, &PhotosSidecarSync::startIfPending);
 
+    // Like "code <folder>": later "digikam --photos <path>" calls hand their
+    // paths over to this window (PhotosMode::forwardToRunningInstance()).
+
+    QLocalServer* const server = new QLocalServer(this);
+    server->setSocketOptions(QLocalServer::UserAccessOption);
+
+    if (!server->listen(PhotosMode::instanceServerName()))
+    {
+        // A stale socket of a crashed instance.
+
+        QLocalServer::removeServer(PhotosMode::instanceServerName());
+        server->listen(PhotosMode::instanceServerName());
+    }
+
+    connect(server, &QLocalServer::newConnection,
+            this, &PhotosContainer::slotNewInstanceConnection);
+
+    // macOS: folders and photos dropped on the Dock icon or opened from Finder.
+    // A separate filter: an application filter sees the events of all objects.
+
+    qApp->installEventFilter(new PhotosFileOpenFilter(this));
+
+
     setCurrentWidget(m_quick);
     m_library->reload();
+}
+
+void PhotosContainer::slotNewInstanceConnection()
+{
+    QLocalServer* const server = qobject_cast<QLocalServer*>(sender());
+
+    while (server && server->hasPendingConnections())
+    {
+        QLocalSocket* const socket = server->nextPendingConnection();
+
+        connect(socket, &QLocalSocket::disconnected,
+                socket, &QObject::deleteLater);
+
+        connect(socket, &QLocalSocket::readyRead,
+                this, [this, socket] ()
+            {
+                while (socket->canReadLine())
+                {
+                    const QJsonObject message = QJsonDocument::fromJson(socket->readLine()).object();
+                    QStringList paths;
+
+                    for (const QJsonValue& path : message.value(QLatin1String("open")).toArray())
+                    {
+                        paths << path.toString();
+                    }
+
+                    openPaths(paths);
+                }
+            }
+        );
+    }
+}
+
+void PhotosContainer::openStartupPaths()
+{
+    // Paths of this process' command line: the window is just being shown.
+
+    m_windowReady            = true;
+    const QStringList paths  = PhotosMode::takeStartupPaths() + m_pendingPaths;
+    m_pendingPaths.clear();
+
+    if (!paths.isEmpty())
+    {
+        Q_EMIT openRequested(m_libraries->checkPath(paths.constFirst()));
+    }
+}
+
+void PhotosContainer::openPaths(const QStringList& paths)
+{
+    // Another instance started while this one is still starting: later.
+
+    if (!m_windowReady)
+    {
+        m_pendingPaths << paths;
+
+        return;
+    }
+
+    // To the front, as a second "code" call does.
+
+    if (m_app)
+    {
+        if (m_app->isMinimized())
+        {
+            m_app->showNormal();
+        }
+
+        m_app->show();
+        m_app->raise();
+        m_app->activateWindow();
+    }
+
+    if (!photosActive())
+    {
+        setPhotosActive(true);
+    }
+
+    if (paths.isEmpty())
+    {
+        return;
+    }
+
+    // One window, one view: the first path is shown.
+
+    Q_EMIT openRequested(m_libraries->checkPath(paths.constFirst()));
 }
 
 bool PhotosContainer::sidecars() const

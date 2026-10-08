@@ -23,12 +23,17 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequence>
+#include <QLocalSocket>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPointer>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUrl>
 
 // KDE includes
 
@@ -53,6 +58,7 @@ namespace
 
 bool                      s_enabled = false;
 QPointer<PhotosContainer> s_container;
+QStringList               s_startupPaths;
 
 } // namespace
 
@@ -142,6 +148,83 @@ void PhotosMode::addCommandLineOptions(QCommandLineParser& parser)
 {
     parser.addOption(QCommandLineOption(QStringList() << QLatin1String("photos"),
                                         i18n("Start digiKam with the streamlined Photos interface")));
+    parser.addPositionalArgument(QLatin1String("path"),
+                                 i18n("Photos mode: folder or photo to open (added to the library if needed)"),
+                                 QLatin1String("[path...]"));
+}
+
+QString PhotosMode::instanceServerName()
+{
+    // One instance per user and configuration (the same database).
+
+    QString user = qEnvironmentVariable("USER");
+
+    if (user.isEmpty())
+    {
+        user = qEnvironmentVariable("USERNAME");
+    }
+
+    const QByteArray key = (user + QLatin1Char('@') + QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
+                            QLatin1Char('/') + configFileName()).toUtf8();
+
+    return QLatin1String("digikam-photos-") + QString::number(qHash(key), 16);
+}
+
+bool PhotosMode::forwardToRunningInstance(const QCommandLineParser& parser)
+{
+    if (!s_enabled)
+    {
+        return false;
+    }
+
+    QStringList paths;
+
+    for (const QString& argument : parser.positionalArguments())
+    {
+        // File managers may pass URLs ("file:///home/...").
+
+        const QString path = argument.startsWith(QLatin1String("file:")) ? QUrl(argument).toLocalFile()
+                                                                         : argument;
+
+        if (!path.isEmpty())
+        {
+            paths << QDir::current().absoluteFilePath(path);
+        }
+    }
+
+    QLocalSocket socket;
+    socket.connectToServer(instanceServerName());
+
+    if (!socket.waitForConnected(500))
+    {
+        s_startupPaths = paths;
+
+        return false;
+    }
+
+    QJsonObject message;
+    message.insert(QLatin1String("open"), QJsonArray::fromStringList(paths));
+
+    socket.write(QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n');
+    socket.waitForBytesWritten(1000);
+    socket.disconnectFromServer();
+
+    if (socket.state() != QLocalSocket::UnconnectedState)
+    {
+        socket.waitForDisconnected(1000);
+    }
+
+    qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode already running: handed over" << paths;
+
+    return true;
+}
+
+QStringList PhotosMode::takeStartupPaths()
+{
+    const QStringList paths = s_startupPaths;
+    s_startupPaths.clear();
+
+    return paths;
 }
 
 QWidget* PhotosMode::createCentralWidget(DigikamApp* const app, ItemIconView* const classicView)
@@ -195,6 +278,7 @@ void PhotosMode::finalizeMainWindow(DigikamApp* const app)
             if (s_container)
             {
                 s_container->setPhotosActive(true);
+                s_container->openStartupPaths();
             }
         }
     );

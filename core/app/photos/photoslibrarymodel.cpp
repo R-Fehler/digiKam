@@ -313,6 +313,23 @@ void PhotosLibraryModel::showFiles(const QStringList& filePaths, const QString& 
     setView(Files, -1);
 }
 
+void PhotosLibraryModel::showFolder(const QString& folderPath)
+{
+    m_folder = QDir::cleanPath(folderPath);
+
+    setView(Folder, -1);
+}
+
+QString PhotosLibraryModel::folderPath() const
+{
+    return (m_filter == Folder) ? m_folder : QString();
+}
+
+int PhotosLibraryModel::rowOfPath(const QString& filePath) const
+{
+    return m_rowOfPath.value(QDir::cleanPath(filePath), -1);
+}
+
 QString PhotosLibraryModel::filesKey() const
 {
     return (m_filter == Files) ? m_filesKey : QString();
@@ -335,6 +352,21 @@ QString PhotosLibraryModel::title() const
 
         case Files:
             return m_filesTitle;
+
+        case Folder:
+        {
+            // "2026 › 10" inside a library folder, its name for the library folder itself.
+
+            const QString root     = CollectionManager::instance()->albumRootPath(m_folder);
+            const QString relative = root.isEmpty() ? QString() : QDir(root).relativeFilePath(m_folder);
+
+            if (!relative.isEmpty() && (relative != QLatin1String(".")))
+            {
+                return relative.split(QLatin1Char('/'), Qt::SkipEmptyParts).join(QString::fromUtf8(" \u203A "));
+            }
+
+            return QFileInfo(m_folder).fileName().isEmpty() ? m_folder : QFileInfo(m_folder).fileName();
+        }
 
         case Camera:
             return photosPrettyDevice(m_cameraMake, m_cameraModel);
@@ -427,6 +459,7 @@ void PhotosLibraryModel::reload()
     query.make        = m_cameraMake;
     query.model       = m_cameraModel;
     query.files       = m_files;
+    query.folder      = m_folder;
     query.hiddenTagId = TagsCache::instance()->tagForPath(hiddenTagName());
 
     m_watcher.setFuture(QtConcurrent::run(&PhotosLibraryModel::queryEntries, query));
@@ -636,6 +669,17 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryEntries(const Query& qu
         entry.rating   = qMax(0, values.at(i + 6).toInt());
 
         if ((filter == Files) && !query.files.contains(entry.filePath))
+        {
+            continue;
+        }
+
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        const Qt::CaseSensitivity pathCase = Qt::CaseInsensitive;
+#else
+        const Qt::CaseSensitivity pathCase = Qt::CaseSensitive;
+#endif
+
+        if ((filter == Folder) && !entry.filePath.startsWith(query.folder + QLatin1Char('/'), pathCase))
         {
             continue;
         }

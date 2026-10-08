@@ -158,6 +158,87 @@ The player is in its own QML file loaded through a `Loader`. On a build without 
 | Ultra HDR / gain maps | Pixel, Samsung, iPhone | Shown as SDR (the base image) |
 | Apple `.AAE` edit files | iPhone (edited photos, "Keep Originals") | Not imported; no app outside Apple's applies them. With "Transfer to Mac or PC: Automatic" the iPhone sends edited photos with the edits applied. |
 
+## Library folders
+
+A library can span any number of folders: an internal disk, external drives, network shares. They are digiKam's collections ("album roots"), all in one library database, so stock digiKam shows the same folders.
+
+- **Managing them.** Settings → Library folders lists them, with **Add a folder…** and **Remove…**.
+  - Removing a folder takes its photos out of the library only. The files stay where they are.
+  - In sidecar mode, favorites, albums and captions come back when the folder is added again.
+- **Browsing them.** The sidebar lists them under **Folders**, each showing its photos and those of its subfolders.
+- **Drives that are not connected.** A folder on such a drive stays in the library, greyed out, and comes back when the drive does.
+
+This is digiKam's model, not Apple Photos' one. Apple Photos keeps separate, self-contained libraries and switches between them. Here, one library database indexes many folders.
+
+Separate libraries are still possible, through digiKam's "database folder": `digikam --photos --database-directory <dir>` starts on another library. A library switcher in the UI is not done.
+
+## Opening a folder or a photo
+
+```
+digikam --photos ~/Pictures/Trip          # a folder
+digikam --photos IMG_1234.HEIC            # a photo: its folder, then the viewer on it
+digiKam-Photos-x86_64.AppImage ~/Pictures # the AppImage starts Photos mode by default
+```
+
+This works like `code <folder>`:
+
+- **Relative paths** are resolved against the current directory. `file://` URLs are accepted, as file managers pass them.
+- **One window.** When Photos mode already runs (same user and settings), the new process hands the paths over through a local socket (`QLocalServer`, one per user) and exits at once, about 1 s. The window comes to the front with the folder shown.
+- **A folder inside a library folder** opens as a folder view; its title is the path inside the library ("2026 › 09").
+- **A folder outside the library** asks: **Add "Trip" to your library?** The folder becomes a library folder, is scanned in the background, and is shown. digiKam's own check (`CollectionManager::checkLocation`) refuses folders that cannot be added, for example the parent folder of an existing library folder.
+- **macOS:** folders and photos dropped on the Dock icon or opened from Finder arrive as `QFileOpenEvent` and are handled the same way.
+
+For a short command on Linux, link the AppImage: `ln -s ~/Applications/digiKam-Photos-x86_64.AppImage ~/.local/bin/photos`, then run `photos ~/Pictures/Trip`.
+
+Tested in the container:
+- a relative subfolder handed to the running window;
+- a folder outside the library, added after the prompt and scanned;
+- a photo given at a cold start, opened in the viewer;
+- removing a folder: database entries gone, files untouched.
+
+### File manager integration (planned)
+
+These all call the command above.
+
+| Platform | How | Notes |
+|---|---|---|
+| Linux, all desktops | A `.desktop` entry with `MimeType=inode/directory;image/*;video/*` and `Exec=... --photos %U` | Shows up in "Open With". AppImages need an "install desktop integration" step that writes the entry with the AppImage path, as AppImageLauncher does. |
+| KDE Dolphin | Service menu in `~/.local/share/kio/servicemenus/` ("Open in Photos") | Right-click on a folder or photos |
+| GNOME Files, Nemo | `.desktop` "Open With", or a Nautilus script or extension | |
+| Windows | Registry, per user: `HKCU\Software\Classes\Directory\shell\…` (`"%1"`), `Directory\Background\shell\…` (`"%V"`), `SystemFileAssociations\image\shell\…` | Written by the installer behind a checkbox, as VS Code does. On Windows 11 they appear under "Show more options"; the top-level menu needs a packaged `IExplorerCommand` extension. |
+| macOS | `CFBundleDocumentTypes` with `public.folder` in Info.plist (open, Dock drop), and a Finder Quick Action ("Open in Photos") | The Quick Action can ship as a `.workflow` that runs `open -a`. A Finder Sync extension needs a signed app. |
+
+## Sidecars: visibility and other applications
+
+**Visibility.** Sidecars are ordinary, visible files: `IMG_1234.HEIC.xmp` next to `IMG_1234.HEIC`.
+
+- They cannot simply be renamed to hidden dot-files: no other application would read `.IMG_1234.HEIC.xmp`.
+- They are written only for photos with information: favorites, albums, captions, people, hidden, and currently the device tag of imported photos.
+- The hidden folders (`.dtrash`, `.photos-imports`) are hidden on Linux and macOS by their name. On Windows Photos mode sets the hidden attribute on them.
+
+What other applications do with a library folder (unverified points marked):
+
+| Application | Photos and videos | Sidecars (`IMG.HEIC.xmp`) |
+|---|---|---|
+| File managers (Explorer, Finder, Files, Dolphin) | Shown | Shown as extra files |
+| Windows Photos, macOS Preview / Photos viewer, Loupe / Eye of GNOME, Gwenview | Shown; folder structure YYYY/MM | Ignored: not images, never shown as photos. Ratings and keywords not read from sidecars. |
+| digiKam (stock) | Same library | Read and written (same settings) |
+| darktable | Yes | Reads the same naming (`file.ext.xmp`); rating and tags yes, its own edit history kept separately |
+| Lightroom Classic, Bridge, Capture One | Yes | Expect `IMG.xmp` (no extension) and use sidecars mainly for RAW files; JPEG/HEIC metadata is read from inside the file. digiKam's "Use Compatible File Name" writes `IMG.xmp`, but then a RAW+JPEG pair shares one sidecar. (Unverified in detail.) |
+| Immich, PhotoPrism (self-hosted) | Yes | Read XMP sidecars, both naming schemes (unverified here). Exclude `**/.dtrash/**` from their scans. |
+| Apple Photos (import), Google Photos, OneDrive / iCloud upload | Imported | Not read by the cloud services; Apple Photos import of sidecars unverified |
+
+**Ways to reduce the clutter (open decision).**
+
+- **Device names in the import records instead of a tag.** Photos you never touch then have no sidecar. The cost: other applications don't see the device, and moving files outside Photos loses it.
+- **Hide sidecars in file managers without renaming them:**
+  - Windows: hidden attribute;
+  - macOS: `chflags hidden`;
+  - GNOME Files and Dolphin: a `.hidden` file listing them.
+
+  Other applications still read them. These marks don't travel with synced files, so Photos mode would set them on each computer.
+- **Write into the photo files** (JPEG, PNG, TIFF). No extra files, but the originals change (backups, syncs, hashes), and HEIC and videos would still need sidecars. Not recommended.
+
 ## Known gaps
 
 - **Phones on Windows and macOS.** They are not mounted as folders: an iPhone appears as an MTP or Apple device, not a drive. A phone sync app (PhotoSync, Syncthing, Nextcloud, OneDrive) can put the photos in a folder, which is then imported or set as the import source. digiKam's gphoto2 camera import could reach them on Linux and macOS, and is not wired to Photos mode yet.

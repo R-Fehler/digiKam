@@ -37,6 +37,7 @@ class PhotosThumbnailBroker;
 class PhotosPreviewLoader;
 class PhotosSidecarSync;
 class PhotosImporter;
+class PhotosLibraries;
 
 class PhotosContainer : public QStackedWidget
 {
@@ -93,6 +94,16 @@ public:
      */
     Q_INVOKABLE void prefetchPreviews(int row, int size);
 
+    /**
+     * Opens folders or photos (command line, another "digikam --photos <path>",
+     * Finder): the window comes to the front and the Photos UI shows the first
+     * one (see openRequested()).
+     */
+    void openPaths(const QStringList& paths);
+
+    /// Opens the paths of the command line; once the main window is complete.
+    void openStartupPaths();
+
 Q_SIGNALS:
 
     void signalPhotosActiveChanged();
@@ -108,6 +119,9 @@ Q_SIGNALS:
     void touchPinchUpdated(qreal scale, qreal x, qreal y);
     void touchPinchFinished();
 
+    /// A folder or photo to show: PhotosLibraries::checkPath() of it.
+    void openRequested(const QVariantMap& target);
+
 protected:
 
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -116,6 +130,7 @@ private Q_SLOTS:
 
     void slotToggle();
     void slotPregenerate();
+    void slotNewInstanceConnection();
 
 private:
 
@@ -132,6 +147,9 @@ private:
     PhotosPreviewLoader*   m_previews    = nullptr;
     PhotosSidecarSync*     m_sidecarSync = nullptr;
     PhotosImporter*        m_importer    = nullptr;
+    PhotosLibraries*       m_libraries   = nullptr;
+    QStringList            m_pendingPaths;
+    bool                   m_windowReady = false;
     QAction*               m_toggle      = nullptr;
     QTimer*                m_pregenTimer = nullptr;
     int                    m_pregeneratedCount = -1;

@@ -267,6 +267,17 @@ MAIN_EXPORT int MAIN_FN(int argc, char** argv)
     parser.process(app);
     aboutData.processCommandLine(&parser);
 
+#ifdef HAVE_PHOTOSMODE
+
+    // "digikam --photos <folder>" while Photos mode runs: open it there.
+
+    if (PhotosMode::forwardToRunningInstance(parser))
+    {
+        return 0;
+    }
+
+#endif
+
     // See bug #438701
 
     installQtTranslationFiles(app);

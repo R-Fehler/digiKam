@@ -15,6 +15,9 @@ Popup {
     focus:            true
     padding:          22
 
+    signal requestAddFolder()
+    signal requestRemoveFolder(int folderId, string name)
+
     background: Rectangle {
         color:  palette.window
         radius: 14
@@ -87,6 +90,49 @@ Popup {
             color:   palette.highlight
         }
 
+        // --- Library folders ---------------------------------------------------------
+
+        Heading {
+            text: qsTr("Library folders")
+        }
+
+        Repeater {
+            model: libraries.folders
+
+            delegate: RowLayout {
+                required property var modelData
+
+                Layout.fillWidth: true
+                spacing:          8
+
+                Text {
+                    Layout.fillWidth: true
+                    text:             modelData.available ? modelData.path
+                                                          : qsTr("%1 (not connected)").arg(modelData.name)
+                    elide:            Text.ElideMiddle
+                    color:            palette.windowText
+                    opacity:          modelData.available ? 1.0 : 0.5
+                    font.pixelSize:   13
+                }
+
+                Button {
+                    text:      qsTr("Remove\u2026")
+                    onClicked: settings.requestRemoveFolder(modelData.id, modelData.name)
+                }
+            }
+        }
+
+        Button {
+            text:      qsTr("Add a folder\u2026")
+            onClicked: settings.requestAddFolder()
+        }
+
+        Note {
+            text: qsTr("Photos in all these folders are in your library. Folders on external or "
+                       + "network drives stay in it while the drive is not connected. "
+                       + "Opening a folder (\u201Cdigikam --photos <folder>\u201D) adds it too.")
+        }
+
         // --- Import ----------------------------------------------------------------------
 
         Heading {
@@ -101,8 +147,7 @@ Popup {
         }
 
         Note {
-            text: qsTr("Imported photos go into a folder per year and month (2026/10). "
-                       + "Library folders are managed in the classic interface (Settings → Collections).")
+            text: qsTr("Imported photos go into a folder per year and month (2026/10) of this library folder.")
         }
 
         // --- Viewer -------------------------------------------------------------------------

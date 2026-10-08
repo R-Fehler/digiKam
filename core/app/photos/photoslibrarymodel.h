@@ -68,6 +68,9 @@ class PhotosLibraryModel : public QAbstractListModel
     /// Files filter: identifies what is shown (e.g. an import id).
     Q_PROPERTY(QString      filesKey     READ filesKey     NOTIFY filterChanged)
 
+    /// Folder filter: the folder shown.
+    Q_PROPERTY(QString      folderPath   READ folderPath   NOTIFY filterChanged)
+
     /// Incremented whenever per-photo flags change: lets QML bindings refresh.
     Q_PROPERTY(int          revision     READ revision     NOTIFY revisionChanged)
 
@@ -92,7 +95,8 @@ public:
         Panoramas   = 9,
         Selfies     = 10,
         Hidden      = 11,
-        Trash       = 12    ///< "Recently Deleted": digiKam's collection trash.
+        Trash       = 12,   ///< "Recently Deleted": digiKam's collection trash.
+        Folder      = 13    ///< A folder of the library, with its subfolders.
     };
     Q_ENUM(Filter)
 
@@ -135,6 +139,7 @@ public:
     QVariantList albums()     const;
     QVariantList devices()    const;
     QString      filesKey()   const;
+    QString      folderPath() const;
     int          revision()   const;
     int          selectionCount()    const;
     int          selectionRevision() const;
@@ -149,6 +154,8 @@ public:
     Q_INVOKABLE void      showDeviceTag(int tagId);
     Q_INVOKABLE void      showCamera(const QString& make, const QString& model);
     Q_INVOKABLE void      showFiles(const QStringList& filePaths, const QString& title, const QString& key);
+    Q_INVOKABLE void      showFolder(const QString& folderPath);
+    Q_INVOKABLE int       rowOfPath(const QString& filePath)    const;
     Q_INVOKABLE qlonglong idAt(int row)                         const;
     Q_INVOKABLE int       rowOfId(qlonglong id)                 const;
     Q_INVOKABLE QString   filePathAt(int row)                   const;
@@ -261,6 +268,7 @@ public:
         QString       make;
         QString       model;
         QSet<QString> files;
+        QString       folder;
     };
 
     struct QueryResult
@@ -296,6 +304,7 @@ private:
     QSet<QString>                        m_files;
     QString                              m_filesTitle;
     QString                              m_filesKey;
+    QString                              m_folder;
     QTimer*                              m_reloadTimer = nullptr;
     QTimer*                              m_albumsTimer = nullptr;
     QVariantList                         m_albums;

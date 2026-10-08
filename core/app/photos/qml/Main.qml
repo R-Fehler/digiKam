@@ -100,6 +100,101 @@ Rectangle {
                 })
     }
 
+    // --- Opening folders ------------------------------------------------------------
+
+    /// Photo to open in the viewer once its folder is listed (opened from the command line).
+    property string pendingOpenFile: ""
+
+    function showFolder(path, file) {
+        if (viewer.visible)
+            viewer.close()
+
+        sidebar.page    = "grid"
+        pendingOpenFile = file || ""
+        library.showFolder(path)
+        pendingTimer.restart()
+    }
+
+    function addFolder(path, file) {
+        const error = libraries.addFolder(path)
+
+        if (error.length > 0)
+            confirm(qsTr("The folder could not be added"), error, qsTr("OK"), null)
+        else
+            showFolder(path, file)
+    }
+
+    function requestAddFolder() {
+        const folder = libraries.chooseFolder()
+
+        if (folder.length > 0)
+            open(libraries.checkPath(folder))
+    }
+
+    // target: PhotosLibraries::checkPath()
+    function open(target) {
+        if (target.inLibrary) {
+            showFolder(target.path, target.file)
+        }
+        else if (target.canAdd) {
+            confirm(qsTr("Add \u201C%1\u201D to your library?").arg(target.name),
+                    qsTr("Its photos and videos appear in Photos, with its subfolders. The files stay where they are; "
+                         + "favorites, albums and captions are saved in sidecar files next to them.")
+                    + (target.message ? "\n\n" + target.message : ""),
+                    qsTr("Add to library"),
+                    () => root.addFolder(target.path, target.file))
+        }
+        else {
+            confirm(qsTr("This folder cannot be opened"),
+                    target.message || qsTr("It cannot be added to the library."),
+                    qsTr("OK"), null)
+        }
+    }
+
+    function requestRemoveFolder(folderId, name) {
+        confirm(qsTr("Remove \u201C%1\u201D from the library?").arg(name),
+                qsTr("The files are not deleted. Its photos leave Photos; information saved in sidecar "
+                     + "files comes back if you add the folder again."),
+                qsTr("Remove"),
+                () => {
+                    if (library.filter === 13)
+                        sidebar.show(0)
+
+                    libraries.removeFolder(folderId)
+                })
+    }
+
+    // The photo appears once listed; a folder just added is scanned first.
+    Timer {
+        id: pendingTimer
+        interval: 60000
+        onTriggered: root.pendingOpenFile = ""
+    }
+
+    Connections {
+        target: photosApp
+
+        function onOpenRequested(target) {
+            root.open(target)
+        }
+    }
+
+    Connections {
+        target: library
+
+        function onReloaded() {
+            if ((root.pendingOpenFile.length === 0) || (library.filter !== 13))
+                return
+
+            const row = library.rowOfPath(root.pendingOpenFile)
+
+            if (row >= 0) {
+                root.pendingOpenFile = ""
+                viewer.open(row)
+            }
+        }
+    }
+
     function showImport(importId) {
         sidebar.page = "grid"
         importer.showImport(importId)
@@ -161,7 +256,9 @@ Rectangle {
                                        ? qsTr("Loading…")
                                        : ((library.count === 1) ? qsTr("1 item") : qsTr("%L1 items").arg(library.count))
 
-                            if (library.filter === 12)
+                            if (library.filter === 13)
+                                line += " \u00B7 " + library.folderPath
+                            else if (library.filter === 12)
                                 line += qsTr(" \u00B7 restore them, or delete them permanently")
                             else if (library.filter === 11)
                                 line += qsTr(" \u00B7 not shown anywhere else")
@@ -381,6 +478,16 @@ Rectangle {
     SettingsPopup {
         id: settingsPopup
         onClosed: photoGrid.forceActiveFocus()
+
+        onRequestAddFolder: {
+            settingsPopup.close()
+            root.requestAddFolder()
+        }
+
+        onRequestRemoveFolder: (folderId, name) => {
+            settingsPopup.close()
+            root.requestRemoveFolder(folderId, name)
+        }
     }
 
     Popup {

@@ -15,6 +15,7 @@
 // Qt includes
 
 #include <QString>
+#include <QStringList>
 
 // Local includes
 
@@ -50,6 +51,21 @@ public:
     static bool isEnabled();
 
     static void addCommandLineOptions(QCommandLineParser& parser);
+
+    /**
+     * "digikam --photos <folder or photo>...", like "code <folder>": when
+     * Photos mode already runs for this user, hands the paths over to it
+     * (the window comes to the front) and returns true: this process then
+     * exits before opening the database. Otherwise keeps the paths for the
+     * window about to open and returns false.
+     */
+    static bool forwardToRunningInstance(const QCommandLineParser& parser);
+
+    /// Paths given on the command line of this process (taken once).
+    static QStringList takeStartupPaths();
+
+    /// Name of the local socket of the running instance.
+    static QString instanceServerName();
 
     /**
      * Wraps the classic view in a container showing the Photos UI by default.

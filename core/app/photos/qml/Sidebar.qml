@@ -208,6 +208,34 @@ Rectangle {
                     font.pixelSize:   12
                 }
 
+                // --- Library folders (digiKam's collections) ---------------------
+
+                SectionTitle {
+                    text: qsTr("Folders")
+                }
+
+                Repeater {
+                    model: libraries.folders
+
+                    delegate: NavItem {
+                        required property var modelData
+
+                        glyph:       modelData.network ? "\u2601" : (modelData.removable ? "\u23CF" : "\u25A4")
+                        label:       modelData.name
+                        detail:      modelData.available ? "" : qsTr("not connected")
+                        opacity:     modelData.available ? 1.0 : 0.5
+                        selected:    (sidebar.page === "grid") && (library.filter === 13) &&
+                                     (library.folderPath === modelData.path)
+                        onActivated: {
+                            if (!modelData.available)
+                                return
+
+                            sidebar.page = "grid"
+                            library.showFolder(modelData.path)
+                        }
+                    }
+                }
+
                 // --- Devices: named at import, or the cameras of the photos -----
 
                 SectionTitle {

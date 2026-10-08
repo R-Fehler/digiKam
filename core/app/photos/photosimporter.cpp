@@ -35,6 +35,10 @@
 #include <QTimer>
 #include <QtConcurrentRun>
 
+#ifdef Q_OS_WIN
+#   include <windows.h>
+#endif
+
 // KDE includes
 
 #include <kconfiggroup.h>
@@ -108,6 +112,31 @@ QString sourceSidecar(const QFileInfo& info)
     }
 
     return QString();
+}
+
+/**
+ * Folders starting with a dot are hidden on Linux and macOS, not on Windows:
+ * give them the hidden attribute there, as Explorer expects.
+ */
+void hideFolder(const QString& path)
+{
+
+#ifdef Q_OS_WIN
+
+    const std::wstring native = QDir::toNativeSeparators(path).toStdWString();
+    const DWORD attributes    = GetFileAttributesW(native.c_str());
+
+    if ((attributes != INVALID_FILE_ATTRIBUTES) && !(attributes & FILE_ATTRIBUTE_HIDDEN))
+    {
+        SetFileAttributesW(native.c_str(), attributes | FILE_ATTRIBUTE_HIDDEN);
+    }
+
+#else
+
+    Q_UNUSED(path);
+
+#endif
+
 }
 
 QString hashOf(const QString& filePath, int version)
@@ -759,6 +788,7 @@ void PhotosImporter::slotImported()
 
         const QString dir = root + QLatin1Char('/') + QLatin1String(s_historyFolder);
         QDir().mkpath(dir);
+        hideFolder(dir);
 
         QSaveFile file(dir + QLatin1Char('/') + importId + QLatin1String(".json"));
 
@@ -813,6 +843,10 @@ void PhotosImporter::reloadHistory()
 
     for (const QString& root : roots)
     {
+        // Also digiKam's trash folder, created visible on Windows.
+
+        hideFolder(root + QLatin1String("/.dtrash"));
+
         const QDir dir(root + QLatin1Char('/') + QLatin1String(s_historyFolder));
         const QStringList files = dir.entryList(QStringList() << QLatin1String("*.json"), QDir::Files);
 

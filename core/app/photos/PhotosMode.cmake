@@ -5,7 +5,7 @@
 # Included from DigikamGuiTarget.cmake once the digikamgui target exists.
 # Without Qt Quick the stock digiKam build is left untouched.
 
-find_package(Qt6 ${QT6_MIN_VERSION} QUIET NO_MODULE COMPONENTS Qml Quick QuickWidgets)
+find_package(Qt6 ${QT6_MIN_VERSION} QUIET NO_MODULE COMPONENTS Network Qml Quick QuickWidgets)
 
 if(Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickWidgets_FOUND)
 
@@ -19,6 +19,7 @@ if(Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickWidgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/photos/photosimageproviders.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/photos/photosmetadata.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/photos/photosimporter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/photos/photoslibraries.cpp
     )
 
     qt_add_resources(photosmode_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/photos/photos.qrc)
@@ -44,6 +45,7 @@ if(Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickWidgets_FOUND)
                           Qt6::Gui
                           Qt6::Widgets
                           Qt6::Sql
+                          Qt6::Network
                           Qt6::Concurrent
                           Qt6::Qml
                           Qt6::Quick
@@ -58,6 +60,7 @@ if(Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickWidgets_FOUND)
 
     target_link_libraries(digikamgui
                           PRIVATE
+                          Qt6::Network
                           Qt6::Concurrent
                           Qt6::Qml
                           Qt6::Quick
