@@ -9,7 +9,8 @@
 #  - macOS:   DMG (Apple Silicon), built with KDE Craft. Experimental, unsigned.
 #
 # Pushes to the development branch update the rolling "photos-continuous"
-# pre-release; pushing a tag "photos-v*" creates a normal release.
+# pre-release. Pushing a tag "photos-v*" drafts a release from these packages
+# without rebuilding (photos-draft-release.yml).
 
 name: Photos build and release
 
@@ -17,11 +18,10 @@ on:
   push:
     branches:
       - ccr-f0904072-4betfm
-    tags:
-      - "photos-v*"
     paths-ignore:
       - "streamline/docs/**"
       - "**.md"
+      - ".github/workflows/photos-draft-release.yml"
   workflow_dispatch:
 
 permissions:
@@ -43,11 +43,7 @@ jobs:
           major=$(sed -n 's/^set(DIGIKAM_MAJOR_VERSION "\([0-9]*\)")/\1/p' CMakeLists.txt)
           minor=$(sed -n 's/^set(DIGIKAM_MINOR_VERSION "\([0-9]*\)")/\1/p' CMakeLists.txt)
           patch=$(sed -n 's/^set(DIGIKAM_PATCH_VERSION "\([0-9]*\)")/\1/p' CMakeLists.txt)
-          if [[ "${GITHUB_REF}" == refs/tags/photos-v* ]]; then
-            version="${GITHUB_REF_NAME#photos-v}"
-          else
-            version="${major}.${minor}.${patch}-photos-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
-          fi
+          version="${major}.${minor}.${patch}-photos-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Version: ${version}"
 
@@ -117,7 +113,7 @@ jobs:
 
       - name: Package AppImage
         env:
-          UPDATE_INFORMATION: gh-releases-zsync|${{ github.repository_owner }}|${{ github.event.repository.name }}|${{ startsWith(github.ref, 'refs/tags/') && 'latest' || env.CONTINUOUS_TAG }}|digiKam-Photos-*x86_64.AppImage.zsync
+          UPDATE_INFORMATION: gh-releases-zsync|${{ github.repository_owner }}|${{ github.event.repository.name }}|${{ env.CONTINUOUS_TAG }}|digiKam-Photos-*x86_64.AppImage.zsync
         run: streamline/packaging/linux/build-appimage.sh build dist "${VERSION}"
 
       - name: Smoke test (start Photos mode on a virtual display)
@@ -237,16 +233,13 @@ jobs:
 
           Photos mode shares the database, thumbnails and files with stock digiKam; its settings are kept in a separate \`digikam-photosrc\`."
 
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            gh release create "${GITHUB_REF_NAME}" dist/* --title "digiKam Photos ${VERSION}" --notes "${notes}" --verify-tag
-          else
-            # Runs are not serialized: never replace the release with an older commit.
-            head=$(gh api "repos/${GH_REPO}/commits/${GITHUB_REF_NAME}" --jq .sha)
-            if [ "${head}" != "${GITHUB_SHA}" ]; then
-              echo "${GITHUB_REF_NAME} moved on to ${head}, not publishing ${GITHUB_SHA}"
-              exit 0
-            fi
-            gh release delete "${CONTINUOUS_TAG}" --yes --cleanup-tag || true
-            gh release create "${CONTINUOUS_TAG}" dist/* --target "${GITHUB_SHA}" --prerelease \
-               --title "digiKam Photos (continuous build)" --notes "${notes}"
+          # Runs are not serialized: only the newest run of the branch publishes.
+          newest=$(gh run list --workflow photos-release.yml --branch "${GITHUB_REF_NAME}" --event push \
+                     --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ "${newest}" != "${GITHUB_RUN_ID}" ]; then
+            echo "A newer run (${newest}) exists, not publishing ${GITHUB_SHA}"
+            exit 0
           fi
+          gh release delete "${CONTINUOUS_TAG}" --yes --cleanup-tag || true
+          gh release create "${CONTINUOUS_TAG}" dist/* --target "${GITHUB_SHA}" --prerelease \
+             --title "digiKam Photos (continuous build)" --notes "${notes}"

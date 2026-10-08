@@ -6,8 +6,8 @@ releases.
 
 | Trigger | Result |
 |---|---|
-| Push to the development branch | The rolling pre-release `photos-continuous` is replaced by the new build |
-| Push of a tag `photos-v<version>` | A normal release `<version>` |
+| Push to the development branch | Build on all three systems; the rolling pre-release `photos-continuous` is replaced by the new build |
+| Push of a tag `photos-v<version>` | A **draft** release `digiKam Photos <version>` with the packages of that commit's build (no rebuild) |
 | Any run | Every package is also attached to the run as an artifact |
 
 A pre-release is published only when the Linux job succeeds. Windows and
@@ -18,8 +18,15 @@ workflow.
 To make a release:
 
 ```sh
-git tag photos-v9.2.0-1 && git push origin photos-v9.2.0-1
+git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
 ```
+
+`.github/workflows/photos-draft-release.yml` then waits for the build of the
+tagged commit, or of its newest built ancestor when the later commits only
+touched docs. It takes that build's packages and creates a draft
+pre-release with generated notes. Review it on the GitHub releases page and
+publish it. The packages keep their build names
+(`digiKam-Photos-<version>-photos-<date>-<commit>-x86_64.AppImage`).
 
 ## Linux: AppImage
 
@@ -38,6 +45,12 @@ git tag photos-v9.2.0-1 && git push origin photos-v9.2.0-1
   [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate), a
   downloaded continuous AppImage can update itself from the matching `.zsync`
   file on the release.
+* The map works: the geolocation engine's plugins are in
+  `usr/plugins/digikam/marble` and its data is in `usr/share/digikam/marble`.
+  OpenStreetMap tiles are downloaded on demand. If you need a proxy, set it in
+  Settings → Configure digiKam → Miscellaneous → System: digiKam does not use
+  the `http(s)_proxy` environment variables.
+  ![Map in the AppImage](img/map-appimage.jpg)
 * A smoke test starts the finished AppImage on a virtual X display. The test
   fails if digiKam exits within 60 seconds.
 * Requirement: glibc 2.39, so Ubuntu 24.04, Debian 13, Fedora 40 or newer.

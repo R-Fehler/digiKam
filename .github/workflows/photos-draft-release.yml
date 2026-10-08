@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Draft a release of digiKam Photos from an existing build.
+#
+#   git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
+#
+# Does not rebuild: takes the packages (Linux AppImage, and the Windows / macOS
+# packages when their jobs succeeded) of the newest "Photos build and release"
+# run whose commit is the tagged commit or one of its ancestors, waiting for it
+# when it is still running. The release is created as a draft: review the
+# notes and assets on GitHub, then publish it.
+
+name: Photos draft release
+
+on:
+  push:
+    tags:
+      - "photos-v*"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Find the build of the tagged commit
+        id: build
+        run: |
+          for attempt in $(seq 1 66); do
+            run_id=""
+            while read -r id sha status conclusion; do
+              # The build's commit must be the tagged commit or an ancestor of it.
+              rel=$(gh api "repos/${GH_REPO}/compare/${sha}...${GITHUB_SHA}" --jq .status 2>/dev/null || true)
+              if [ "${rel}" = "identical" ] || [ "${rel}" = "ahead" ]; then
+                run_id="${id}"; run_status="${status}"; run_conclusion="${conclusion}"; run_sha="${sha}"
+                break
+              fi
+            done < <(gh run list --workflow photos-release.yml --event push --limit 30 \
+                       --json databaseId,headSha,status,conclusion \
+                       --jq '.[] | "\(.databaseId) \(.headSha) \(.status) \(.conclusion)"')
+
+            if [ -z "${run_id}" ]; then
+              echo "::error::No build of ${GITHUB_SHA} or of an ancestor found"
+              exit 1
+            fi
+
+            if [ "${run_status}" = "completed" ]; then
+              if [ "${run_conclusion}" != "success" ]; then
+                echo "::error::Build run ${run_id} (${run_sha}) concluded ${run_conclusion}"
+                exit 1
+              fi
+              echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+              echo "run_sha=${run_sha}" >> "$GITHUB_OUTPUT"
+              echo "Using build run ${run_id} of ${run_sha}"
+              exit 0
+            fi
+
+            echo "Build run ${run_id} (${run_sha}) is ${run_status}, waiting..."
+            sleep 300
+          done
+          echo "::error::Timed out waiting for the build"
+          exit 1
+
+      - name: Download its packages
+        run: |
+          mkdir dist
+          for name in linux-appimage windows-installer macos-dmg; do
+            gh run download "${{ steps.build.outputs.run_id }}" --name "${name}" --dir dist \
+              || echo "No ${name} package in this build"
+          done
+          ls -la dist
+          ls dist/*.AppImage > /dev/null
+
+      - name: Create the draft release
+        run: |
+          version="${TAG#photos-v}"
+          sha="${{ steps.build.outputs.run_sha }}"
+          run_url="https://github.com/${GH_REPO}/actions/runs/${{ steps.build.outputs.run_id }}"
+          has() { ls dist/$1 > /dev/null 2>&1 && echo "yes" || echo "not in this release"; }
+
+          cat > notes.md <<EOF
+          digiKam with **Photos mode**, a streamlined photo library view in the style of Apple Photos / Google Photos, built on top of stock digiKam ${version%%-*}.
+
+          Photos mode works on the same database, thumbnails and files as stock digiKam: you can switch between the two at any time (Ctrl+Shift+P), and go back to stock digiKam without migrating anything. Photos mode keeps its own settings file (\`digikam-photosrc\`), copied from \`digikamrc\` the first time.
+
+          ## Downloads
+
+          | System | Package | Included |
+          |---|---|---|
+          | Linux (x86_64, Ubuntu 24.04 / Debian 13 / Fedora 40 or newer) | \`digiKam-Photos-*.AppImage\` | $(has '*.AppImage') |
+          | Windows 10/11 (x86_64) | \`*.exe\` installer | $(has '*.exe') |
+          | macOS 13+ (Apple Silicon) | \`*.dmg\` | $(has '*.dmg') |
+
+          **Linux**: \`chmod +x digiKam-Photos-*.AppImage\` and run it. It starts in Photos mode; \`--classic\` starts the stock interface. Includes ExifTool and the map (OpenStreetMap).
+
+          **Windows / macOS**: unsigned builds made with KDE Craft. Windows SmartScreen asks for confirmation; on macOS use right-click → Open the first time. Start with \`--photos\`, or press Ctrl+Shift+P to switch.
+
+          ## Notes
+
+          - Back up your digiKam database before trying a preview build.
+          - Do not run stock digiKam and digiKam Photos at the same time on the same database.
+
+          Built from ${sha} (${run_url}).
+          EOF
+
+          gh release create "${TAG}" dist/* --draft --prerelease --verify-tag \
+             --title "digiKam Photos ${version}" --notes-file notes.md
+
+          echo "Draft created: https://github.com/${GH_REPO}/releases (visible to maintainers until published)"
