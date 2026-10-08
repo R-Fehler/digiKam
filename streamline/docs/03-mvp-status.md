@@ -137,6 +137,57 @@ Zooming from 26 to 9 columns (crossing from 192 px to 512 px) showed no placehol
 - **No CPU-side duplication.** Qt Quick's texture factory keeps the image as is when it is `RGB32` or `ARGB32_Premultiplied`, sharing the pixel data with our cache (Qt's implicit sharing); for any other format it would keep a converted copy. The broker now stores thumbnails in one of these two formats.
 - **One extra copy on a real GPU.** There, the texture of each on-screen tile is a second copy in video memory, which cannot be avoided. It is bounded by the number of instantiated tiles and kept small at dense zoom by the size ladder.
 
+## Round 4: pinch on Wayland, faster full screen viewer, thumbnail strip
+
+### Pinch to zoom
+
+On Wayland only the +/- buttons zoomed. There were two causes, both from `QQuickWidget`, which hosts the Qt Quick scene inside the classic main window:
+
+- **Touchpad pinch** arrives as `QEvent::NativeGesture`, and `QQuickWidget` does not pass that event on to its scene. `PhotosContainer` now forwards it to the Qt Quick window (`photosForwardNativeGesture()` in `photosgestures.h`). The `PinchHandler`s in the grid and the viewer then work on Wayland, X11 (XInput 2.4) and macOS.
+- **Touch screen pinch** had several problems:
+  - Qt widgets stop sending a touch point that the widget did not accept, so a second finger nobody took vanished.
+  - A list that is already scrolling with one finger hides a newly pressed second finger from the handlers inside it.
+
+  To fix this:
+  - Two-finger pinch is now recognized in C++ from the touch events the widget receives (`PhotosTouchPinch`), and all points are accepted.
+  - The scene gets `photosApp.multiTouch` (it stops scrolling or panning while two fingers are down) and `touchPinch*` signals, which Main.qml sends to the grid or the viewer.
+- **AppImage:** the Ubuntu 24.04 AppImage now bundles the Qt Wayland platform plugin and its shell integration, decoration and graphics plugins. It runs as a native Wayland client (checked under Weston). The 22.04 compatible (Craft) AppImage already had them. Without them, the app ran through XWayland, which delivers no touchpad gestures.
+
+`streamline/tests/gesture_test.cpp` drives the same event path through a `QQuickWidget`. It covers:
+
+- touchpad pinch over the grid and over the viewer;
+- two-finger pinch;
+- a second finger landing after the first one started scrolling;
+- one-finger tap and scroll.
+
+CI builds and runs it after the build:
+
+```
+g++ -std=c++17 -fPIC -I core/app/photos streamline/tests/gesture_test.cpp \
+    $(pkg-config --cflags --libs Qt6QuickWidgets Qt6Quick Qt6Test Qt6Widgets) -o gesture_test
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./gesture_test
+```
+
+**Not tested** on a real touchpad or touch screen yet. The events are simulated.
+
+### Full screen speed
+
+- **Preview loader.** Previews sized to the screen are decoded on their own small thread pool. That is half the cores, from 2 to 4; override with `DIGIKAM_PHOTOS_PREVIEW_THREADS`. Decoding uses digiKam's fast path: the embedded preview of RAW and JPEG files when it is large enough.
+- **The photo on screen first.** Requests for the photo on screen always come first. One thread never takes prefetch work, so a jump is not stuck behind prefetching.
+- **Prefetch.** The viewer prefetches the next photo, the previous one, then two more ahead and one more behind. Videos are skipped. The list is replaced at each move, so stale prefetches are dropped.
+- **Preview cache.** Decoded previews stay in a memory cache of 1/16 of RAM, between 256 MiB and 2 GiB (`previewBudgetKiB()` in `photoscachepolicy.h`). That is about 40 photos at 1600 px with 8 GiB of RAM. It shrinks under memory pressure like the thumbnail cache. Full resolution (only loaded when zooming past the preview's own resolution) is not cached.
+- Images are stored as `RGB32` or `ARGB32_Premultiplied`, so Qt Quick uploads them without a converted copy. They are shown without mipmaps, so changing photo does not regenerate mipmap levels.
+- **Measured** in the container with 4032×3024 JPEGs: a prefetch decode takes 220–330 ms. After the first photo, moving with the arrow keys was served from the cache every time. Set `DIGIKAM_PHOTOS_TRACE=1` to log decode times and cache hits.
+
+### Thumbnail strip
+
+![Viewer with the thumbnail strip](img/viewer-filmstrip.jpg)
+
+- **Layout.** A scrollable strip of small thumbnails sits under the full screen photo, as in iOS Photos or Samsung Gallery. The current photo stays in the middle, slightly larger and outlined.
+- **Scrubbing.** Swiping or flicking the strip moves through the photos. While it moves, only thumbnails are shown, so scrubbing does not start full decodes. The preview loads once it stops. A tap jumps to a photo.
+- **Visibility.** It shows and hides with the viewer's controls, and the controls stay up while the pointer is over the strip. The "Thumbnails" button in the top bar or the T key turns it off or on. The choice is saved (`Photos Mode` / `Filmstrip` in `digikam-photosrc`).
+- **Thumbnails.** It uses the smallest thumbnail size, which the grid has usually already loaded.
+
 ## Bugs found and fixed while testing
 
 - The grid kept a mid-library scroll position while the first collection scan was still adding photos. It now stays at the top when it is at the top.
@@ -156,7 +207,7 @@ These are only indicative: there was no GPU and the CPU was shared with the buil
 ## Known gaps and next steps
 
 1. **Sharing and export** of selected photos: copy to a folder, email, and the existing export plugins.
-2. **Touch testing** on a real touch screen (implemented, untested).
+2. **Touch testing** on a real touch screen and touchpad (implemented and tested with simulated events only).
 4. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
 5. **Import sheet** for phones and cards, with automatic `YYYY/MM` folders.
 6. **People and Places** views using the existing face tags and GPS data.
