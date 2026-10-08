@@ -55,7 +55,11 @@
 // OpenGL headers is not included automatically with ARM targets
 
 #ifdef Q_PROCESSOR_ARM
-#   include <GL/gl.h>
+#   ifdef Q_OS_MACOS
+#       include <OpenGL/gl.h>      // Apple Silicon: OpenGL framework headers
+#   else
+#       include <GL/gl.h>
+#   endif
 #endif
 
 #ifdef HAVE_MEDIAPLAYER

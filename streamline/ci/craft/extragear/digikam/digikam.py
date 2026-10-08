@@ -34,7 +34,8 @@
 #  - no Marble file shuffling in the Windows bundle;
 #  - Qt modules this digiKam needs: qtscxml (StateMachine), qtmultimedia,
 #    qtdeclarative (Qt Quick, for Photos mode);
-#  - libs/boost (Boost Graph, now required) and libs/libheif (HEIC photos).
+#  - libs/boost (Boost Graph, now required) and libs/libheif (HEIC photos);
+#  - ExifTool's test directory is removed from the bundles (fake binaries).
 
 import os
 
@@ -348,6 +349,11 @@ class Package(CMakePackageBase):
                 print("Could not rename ExifTool directory")
                 return False
 
+            # ExifTool's test suite contains fake executables (t/images/EXE.*),
+            # which break the packager's binary processing (patchelf, signing).
+
+            utils.rmtree(os.path.join(binPath, "Image-ExifTool", "t"))
+
             os.symlink(os.path.join("./", "Image-ExifTool", "exiftool"), os.path.join(self.archiveDir(), "bin", "exiftool"))
 
             if not utils.deleteFile(os.path.join(binPath, "Image-ExifTool.tar.gz")):
@@ -387,6 +393,11 @@ class Package(CMakePackageBase):
             if not utils.moveFile(os.path.join(binPath, etname), os.path.join(binPath, "Image-ExifTool")):
                 print("Could not rename ExifTool directory")
                 return False
+
+            # ExifTool's test suite contains fake executables (t/images/EXE.*),
+            # which break the packager's binary processing (patchelf, signing).
+
+            utils.rmtree(os.path.join(binPath, "Image-ExifTool", "t"))
 
             os.symlink(os.path.join("./", "Image-ExifTool", "exiftool"), os.path.join(self.archiveDir(), "bin", "exiftool"))
 

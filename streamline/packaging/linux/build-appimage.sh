@@ -70,6 +70,7 @@ curl -sSfL -o "${WORK_DIR}/exiftool/Image-ExifTool.tar.gz" \
 tar -xzf "${WORK_DIR}/exiftool/Image-ExifTool.tar.gz" -C "${WORK_DIR}/exiftool"
 mv "$(find "${WORK_DIR}/exiftool" -maxdepth 1 -type d -name "Image-ExifTool-*" | head -n1)" \
    "${APPDIR}/usr/bin/Image-ExifTool"
+rm -rf "${APPDIR}/usr/bin/Image-ExifTool/t"            # Test suite, with fake binaries.
 ln -s Image-ExifTool/exiftool "${APPDIR}/usr/bin/exiftool"
 rm -rf "${WORK_DIR}/exiftool"
 
