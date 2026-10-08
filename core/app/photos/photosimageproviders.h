@@ -95,6 +95,7 @@ private Q_SLOTS:
     void slotImageLoaded(const LoadingDescription& description, const QImage& image);
     void slotFileChanged(const QString& filePath);
     void slotPregenerationTick();
+    void slotCheckMemory();
 
 private:
 
@@ -120,6 +121,8 @@ private:
     QHash<QString, int>                               m_pending;    ///< key -> waiting requests, GUI thread only.
     QMutex                                            m_mutex;
     QCache<QString, QImage>                           m_cache;
+    qint64                                            m_cacheBudget  = 0;      ///< KiB, before memory pressure.
+    QTimer*                                           m_memoryTimer  = nullptr;
     QThreadPool                                       m_scalePool;
     QList<int>                                        m_sizes;
 };

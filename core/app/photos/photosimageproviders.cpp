@@ -15,6 +15,7 @@
 // Qt includes
 
 #include <QApplication>
+#include <QFile>
 #include <QMetaObject>
 #include <QMutexLocker>
 #include <QPixmap>
@@ -23,6 +24,12 @@
 #include <QRunnable>
 #include <QThread>
 #include <QTimer>
+
+// C includes
+
+#if defined(__GLIBC__)
+#   include <malloc.h>
+#endif
 
 // KDE includes
 
@@ -34,6 +41,7 @@
 #include "dimg.h"
 #include "loadingcache.h"
 #include "loadingdescription.h"
+#include "photoscachepolicy.h"
 #include "photoslibrarymodel.h"
 #include "previewloadthread.h"
 #include "thumbnailloadthread.h"
@@ -130,13 +138,23 @@ PhotosThumbnailBroker::PhotosThumbnailBroker(QObject* const parent)
     connect(m_pregenTimer, &QTimer::timeout,
             this, &PhotosThumbnailBroker::slotPregenerationTick);
 
-    // Memory budget of the decoded-thumbnail cache: 5% of the physical memory,
-    // between 128 MiB and 2 GiB (e.g. 400 MiB with 8 GiB of RAM, holding about
-    // 550 large or 3700 small thumbnails). This is what makes scrolling back
+    // Memory budget of the decoded-thumbnail cache: 20% of the physical memory,
+    // between 512 MiB and 8 GiB (e.g. 1.6 GiB with 8 GiB of RAM, holding about
+    // 2200 large or 15000 small thumbnails). This is what makes scrolling back
     // instant: Qt Quick itself only keeps the images of instantiated tiles,
     // plus 2 MiB of recently released ones.
+    // The budget shrinks when the system runs low on memory, see slotCheckMemory().
 
-    m_cache.setMaxCost(cacheBudgetKiB());
+    m_cacheBudget = cacheBudgetKiB();
+    m_cache.setMaxCost(m_cacheBudget);
+
+    m_memoryTimer = new QTimer(this);
+    m_memoryTimer->setInterval(5000);
+
+    connect(m_memoryTimer, &QTimer::timeout,
+            this, &PhotosThumbnailBroker::slotCheckMemory);
+
+    m_memoryTimer->start();
 
     // Scaling a cached large thumbnail down to a smaller size.
 
@@ -181,9 +199,152 @@ PhotosThumbnailBroker::~PhotosThumbnailBroker()
     m_scalePool.waitForDone();
 }
 
+namespace
+{
+
+#ifdef Q_OS_LINUX
+
+qint64 readKiB(const QString& path)
+{
+    QFile file(path);
+
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        return -1;
+    }
+
+    bool ok            = false;
+    const qint64 bytes = file.readAll().trimmed().toLongLong(&ok);    // "max" (unlimited) fails
+
+    return ok ? (bytes / 1024) : -1;
+}
+
+/// Value of a key of a cgroup memory.stat file, in KiB (0 if missing).
+qint64 statKiB(const QString& path, const QByteArray& key)
+{
+    QFile file(path);
+
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        return 0;
+    }
+
+    const QList<QByteArray> lines = file.readAll().split('\n');
+    const QByteArray prefix       = QByteArray(key).append(' ');
+
+    for (const QByteArray& line : lines)
+    {
+        if (line.startsWith(prefix))
+        {
+            return line.mid(key.size() + 1).trimmed().toLongLong() / 1024;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Memory limit and usage of our cgroup, in KiB, for cgroup v2 and v1.
+ * Inactive file cache is not counted as used: the kernel reclaims it first.
+ */
+bool cgroupMemory(qint64& limitKiB, qint64& usedKiB)
+{
+    QFile file(QLatin1String("/proc/self/cgroup"));
+
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        return false;
+    }
+
+    QString v2Path;
+    QString v1Path;
+    const QStringList lines = QString::fromLatin1(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+
+    for (const QString& line : lines)
+    {
+        if      (line.startsWith(QLatin1String("0::")))
+        {
+            v2Path = line.mid(3);
+        }
+        else if (line.section(QLatin1Char(':'), 1, 1).split(QLatin1Char(',')).contains(QLatin1String("memory")))
+        {
+            v1Path = line.section(QLatin1Char(':'), 2);
+        }
+    }
+
+    // cgroup v2 (unified hierarchy, possibly mounted below "unified" on hybrid systems).
+
+    const QStringList v2Roots = { QLatin1String("/sys/fs/cgroup"), QLatin1String("/sys/fs/cgroup/unified") };
+
+    for (const QString& root : v2Roots)
+    {
+        const QString dir = root + v2Path;
+
+        if (!v2Path.isEmpty() && QFile::exists(dir + QLatin1String("/memory.max")))
+        {
+            limitKiB = readKiB(dir + QLatin1String("/memory.max"));
+            usedKiB  = readKiB(dir + QLatin1String("/memory.current")) -
+                       statKiB(dir + QLatin1String("/memory.stat"), "inactive_file");
+
+            return ((limitKiB > 0) && (usedKiB >= 0));
+        }
+    }
+
+    // cgroup v1 memory controller.
+
+    if (!v1Path.isEmpty())
+    {
+        const QString dir = QLatin1String("/sys/fs/cgroup/memory") + v1Path;
+        limitKiB          = readKiB(dir + QLatin1String("/memory.limit_in_bytes"));
+        usedKiB           = readKiB(dir + QLatin1String("/memory.usage_in_bytes")) -
+                            statKiB(dir + QLatin1String("/memory.stat"), "total_inactive_file");
+
+        return ((limitKiB > 0) && (usedKiB >= 0));
+    }
+
+    return false;
+}
+
+#endif
+
+/**
+ * Physical memory and memory available, in KiB. On Linux, a cgroup v2 memory
+ * limit (Flatpak, Snap, systemd slices, containers) is taken into account:
+ * /proc/meminfo, read by KMemoryInfo, only knows about the whole machine.
+ */
+void memoryState(qint64& totalKiB, qint64& availableKiB)
+{
+    totalKiB     = 0;
+    availableKiB = -1;
+
+    const KMemoryInfo memory;
+
+    if (!memory.isNull())
+    {
+        totalKiB     = qint64(memory.totalPhysical()     / 1024);
+        availableKiB = qint64(memory.availablePhysical() / 1024);
+    }
+
+#ifdef Q_OS_LINUX
+
+    qint64 limit = 0;
+    qint64 used  = 0;
+
+    if (cgroupMemory(limit, used) && (limit > 0))
+    {
+        totalKiB     = (totalKiB > 0)      ? qMin(totalKiB, limit)            : limit;
+        availableKiB = (availableKiB >= 0) ? qMin(availableKiB, limit - used) : (limit - used);
+    }
+
+#endif
+
+}
+
+} // namespace
+
 qint64 PhotosThumbnailBroker::cacheBudgetKiB()
 {
-    bool ok        = false;
+    bool ok          = false;
     const int envMiB = qEnvironmentVariableIntValue("DIGIKAM_PHOTOS_CACHE_MB", &ok);
 
     if (ok && (envMiB > 0))
@@ -191,16 +352,48 @@ qint64 PhotosThumbnailBroker::cacheBudgetKiB()
         return qint64(envMiB) * 1024;
     }
 
-    const KMemoryInfo memory;
+    qint64 totalKiB     = 0;
+    qint64 availableKiB = 0;
+    memoryState(totalKiB, availableKiB);
 
-    if (memory.isNull() || (memory.totalPhysical() == 0))
+    return PhotosCachePolicy::defaultBudgetKiB(totalKiB);
+}
+
+void PhotosThumbnailBroker::slotCheckMemory()
+{
+    qint64 totalKiB     = 0;
+    qint64 availableKiB = 0;
+    memoryState(totalKiB, availableKiB);
+
+    const qint64 current = m_cache.maxCost();
+    const qint64 maxCost = PhotosCachePolicy::nextMaxCostKiB(current, m_cache.totalCost(), m_cacheBudget,
+                                                             totalKiB, availableKiB);
+
+    if (maxCost == current)
     {
-        return 512 * 1024;
+        return;
     }
 
-    const qint64 fivePercentKiB = qint64(memory.totalPhysical() / 1024 / 20);
+    {
+        QMutexLocker locker(&m_mutex);
+        m_cache.setMaxCost(maxCost);        // evicts least recently used entries
+    }
 
-    return qBound(qint64(128 * 1024), fivePercentKiB, qint64(2 * 1024 * 1024));
+    qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode: thumbnail cache budget" << (maxCost / 1024)
+                                 << "MiB, available memory" << (availableKiB / 1024) << "MiB";
+
+#if defined(__GLIBC__)
+
+    // Thumbnails are small allocations which glibc may keep in its heap:
+    // really return the freed memory to the system.
+
+    if (maxCost < current)
+    {
+        malloc_trim(0);
+    }
+
+#endif
+
 }
 
 QList<int> PhotosThumbnailBroker::sizes() const

@@ -128,7 +128,11 @@ Zooming from 26 to 9 columns (crossing from 192 px to 512 px) showed no placehol
 
 ### Memory budget and Qt Quick's image cache
 
-- **Our cache scales with RAM.** The decoded-thumbnail cache gets 5% of physical memory, between 128 MiB and 2 GiB (override: `DIGIKAM_PHOTOS_CACHE_MB`). That is about 400 MiB with 8 GiB of RAM, and 804 MiB on the 15.7 GiB test container.
+- **Our cache scales with RAM and gives memory back.** The decoded-thumbnail cache gets 20% of physical memory, between 512 MiB and 8 GiB (override: `DIGIKAM_PHOTOS_CACHE_MB`). That is about 1.6 GiB with 8 GiB of RAM.
+  - Every 5 s it checks available memory. When less than max(1 GiB, 10% of RAM) is available, it gives back the missing amount (least recently used thumbnails first, never below 64 MiB) and returns the freed heap to the system (`malloc_trim` on glibc). Once twice that amount is available again, it grows back by 1/8 of the budget per check.
+  - RAM figures come from KDE Frameworks' `KMemoryInfo` (Linux, macOS, Windows, FreeBSD). On Linux, a cgroup v1/v2 memory limit (Flatpak, Snap, systemd slices, containers) is also taken into account; inactive file cache counts as available, as for the kernel.
+  - The policy is a pure function in `photoscachepolicy.h`, unit tested by `streamline/tests/cachepolicy_test.cpp`.
+  - Live test: the cache was filled (754 MB process memory), then another process left 975 MiB available. The budget dropped to 64 MiB and process memory to 504 MB. After the other process ended, the budget grew back 342 MiB per check towards 2.7 GiB.
 - **Qt Quick barely caches.** In Qt 6.11 (`qquickpixmapcache.cpp`), an image is kept while an `Image` item uses it. Once released, it goes to an LRU list of only 2 MiB (`cache_limit`), and a 30 s timer drops a quarter of that list each time. A tile that scrolls out of the pre-created rows therefore loses its image almost at once. Scrolling back is served from our cache.
 - **No CPU-side duplication.** Qt Quick's texture factory keeps the image as is when it is `RGB32` or `ARGB32_Premultiplied`, sharing the pixel data with our cache (Qt's implicit sharing); for any other format it would keep a converted copy. The broker now stores thumbnails in one of these two formats.
 - **One extra copy on a real GPU.** There, the texture of each on-screen tile is a second copy in video memory, which cannot be avoided. It is bounded by the number of instantiated tiles and kept small at dense zoom by the size ladder.
@@ -153,7 +157,6 @@ These are only indicative: there was no GPU and the CPU was shared with the buil
 
 1. **Sharing and export** of selected photos: copy to a folder, email, and the existing export plugins.
 2. **Touch testing** on a real touch screen (implemented, untested).
-3. **Memory pressure.** The cache budget is fixed at start (5% of RAM). It could also shrink when the system runs low on memory.
 4. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
 5. **Import sheet** for phones and cards, with automatic `YYYY/MM` folders.
 6. **People and Places** views using the existing face tags and GPS data.
