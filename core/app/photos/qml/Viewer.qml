@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 import QtQuick.Window
 
 FocusScope {
@@ -29,6 +30,28 @@ FocusScope {
     signal closed(int index)
     signal requestTrash(int row)
     signal requestAddToAlbum(int row)
+    signal requestDeleteForever(int row)
+
+    /// Info panel at the right (button, I key); kept while going through photos.
+    property bool infoOpen: false
+
+    readonly property bool trashView:  library.filter === 12
+    readonly property bool hiddenView: library.filter === 11
+
+    // Inline video player, when the Qt Multimedia QML module is available.
+    readonly property var  videoPlayer: (videoLoader.status === Loader.Ready) ? videoLoader.item : null
+    readonly property bool inlineVideo: viewer.video && (videoPlayer !== null) && !videoPlayer.failed
+
+    // Live Photo: the motion plays over the photo (LIVE button).
+    readonly property url  liveUrl:     (library.revision >= 0) ? library.liveUrlAt(index) : ""
+    property bool          livePlaying: false
+
+    function formatTime(ms) {
+        const s = Math.floor(Math.max(0, ms) / 1000)
+        const m = Math.floor(s / 60)
+        return (m >= 60) ? "%1:%2:%3".arg(Math.floor(m / 60)).arg(String(m % 60).padStart(2, "0")).arg(String(s % 60).padStart(2, "0"))
+                         : "%1:%2".arg(m).arg(String(s % 60).padStart(2, "0"))
+    }
 
     // After a reload (e.g. this photo was moved to the trash) the same index
     // shows the next photo; stay within bounds.
@@ -108,7 +131,12 @@ FocusScope {
     // Neighbours are decoded ahead in C++ (PhotosPreviewLoader), so going to
     // them is instant. Slightly delayed: skipping through photos quickly (keys,
     // filmstrip) does not queue decodes for every photo passed.
-    onIndexChanged: if (visible) prefetchTimer.restart()
+    onIndexChanged: {
+        livePlaying = false
+
+        if (visible)
+            prefetchTimer.restart()
+    }
     onScrubbingChanged: if (!scrubbing && visible) prefetchTimer.restart()
 
     Timer {
@@ -131,8 +159,11 @@ FocusScope {
 
     Item {
         id: stage
-        anchors.fill: parent
-        clip:         true
+        anchors.left:   parent.left
+        anchors.top:    parent.top
+        anchors.bottom: parent.bottom
+        anchors.right:  viewer.infoOpen ? infoPanel.left : parent.right
+        clip:           true
 
         Item {
             id: photo
@@ -193,6 +224,49 @@ FocusScope {
                         loadedFor = viewer.index
                 }
             }
+
+            // 4. Motion of a Live Photo, over the photo while it plays.
+            Loader {
+                id: liveLoader
+                anchors.fill: parent
+                active:       viewer.visible && viewer.livePlaying && (viewer.liveUrl.toString().length > 0)
+                source:       "VideoPlayer.qml"
+
+                onLoaded: item.source = viewer.liveUrl
+
+                Connections {
+                    target: liveLoader.item
+
+                    function onPlayingChanged() {
+                        if (liveLoader.item && !liveLoader.item.playing && liveLoader.item.started)
+                            viewer.livePlaying = false
+                    }
+
+                    function onFailedChanged() {
+                        if (liveLoader.item && liveLoader.item.failed)
+                            viewer.livePlaying = false
+                    }
+                }
+            }
+
+            // 5. Video, played inline (Qt Multimedia); the thumbnail stays as poster frame.
+            Loader {
+                id: videoLoader
+                anchors.fill: parent
+                active:       viewer.visible && viewer.video
+                source:       "VideoPlayer.qml"
+
+                onLoaded: item.source = library.fileUrlAt(viewer.index)
+
+                Connections {
+                    target: viewer
+
+                    function onIndexChanged() {
+                        if (videoLoader.item && viewer.video)
+                            videoLoader.item.source = library.fileUrlAt(viewer.index)
+                    }
+                }
+            }
         }
 
         BusyIndicator {
@@ -202,9 +276,10 @@ FocusScope {
             visible:          running
         }
 
-        // Video: show the poster frame and hand playback to the system player.
+        // Video: big play button while paused. Without inline playback, hand
+        // the video to the system player.
         Rectangle {
-            visible:          viewer.video
+            visible:          viewer.video && (!viewer.inlineVideo || !viewer.videoPlayer.playing)
             anchors.centerIn: parent
             width:            72
             height:           72
@@ -222,7 +297,12 @@ FocusScope {
             MouseArea {
                 anchors.fill: parent
                 cursorShape:  Qt.PointingHandCursor
-                onClicked:    photosApp.openExternally(library.filePathAt(viewer.index))
+                onClicked: {
+                    if (viewer.inlineVideo)
+                        viewer.videoPlayer.toggle()
+                    else
+                        photosApp.openExternally(library.filePathAt(viewer.index))
+                }
             }
         }
 
@@ -290,6 +370,11 @@ FocusScope {
         }
 
         TapHandler {
+            onSingleTapped: {
+                if (viewer.inlineVideo)
+                    viewer.videoPlayer.toggle()
+            }
+
             onDoubleTapped: (eventPoint) => {
                 if (viewer.zoom > 1.0)
                     viewer.resetZoom()
@@ -345,6 +430,30 @@ FocusScope {
                 onClicked: viewer.close()
             }
 
+            Rectangle {
+                visible:                viewer.liveUrl.toString().length > 0
+                anchors.verticalCenter: parent.verticalCenter
+                width:                  liveText.implicitWidth + 16
+                height:                 22
+                radius:                 11
+                color:                  viewer.livePlaying ? "white" : Qt.rgba(1, 1, 1, 0.18)
+
+                Text {
+                    id: liveText
+                    anchors.centerIn: parent
+                    text:             "\u25CE LIVE"
+                    color:            viewer.livePlaying ? "black" : "white"
+                    font.pixelSize:   11
+                    font.bold:        true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape:  Qt.PointingHandCursor
+                    onClicked:    viewer.livePlaying = !viewer.livePlaying
+                }
+            }
+
             Column {
                 anchors.verticalCenter: parent.verticalCenter
 
@@ -371,6 +480,14 @@ FocusScope {
             spacing:                4
 
             IconButton {
+                text:      qsTr("Info")
+                textColor: "white"
+                pixelSize: 13
+                opacity:   viewer.infoOpen ? 1.0 : 0.7
+                onClicked: viewer.infoOpen = !viewer.infoOpen
+            }
+
+            IconButton {
                 text:      qsTr("Thumbnails")
                 textColor: "white"
                 pixelSize: 13
@@ -378,7 +495,28 @@ FocusScope {
                 onClicked: photosApp.filmstrip = !photosApp.filmstrip
             }
 
+            // Recently Deleted: restore or delete for good.
+
             IconButton {
+                visible:   viewer.trashView
+                text:      qsTr("Restore")
+                textColor: "white"
+                pixelSize: 13
+                onClicked: library.restoreAt(viewer.index)
+            }
+
+            IconButton {
+                visible:   viewer.trashView
+                text:      qsTr("Delete permanently")
+                textColor: "#ff8a8a"
+                pixelSize: 13
+                onClicked: viewer.requestDeleteForever(viewer.index)
+            }
+
+            // Everywhere else.
+
+            IconButton {
+                visible:   !viewer.trashView
                 text:      viewer.favorite ? "♥" : "♡"
                 textColor: viewer.favorite ? "#ff5a6e" : "white"
                 pixelSize: 20
@@ -386,6 +524,7 @@ FocusScope {
             }
 
             IconButton {
+                visible:   !viewer.trashView
                 text:      qsTr("Add to album")
                 textColor: "white"
                 pixelSize: 13
@@ -401,19 +540,55 @@ FocusScope {
             }
 
             IconButton {
-                text:      qsTr("Show in folder")
+                id: moreButton
+                visible:   !viewer.trashView
+                text:      "\u22EF"
                 textColor: "white"
-                pixelSize: 13
-                onClicked: photosApp.openContainingFolder(library.filePathAt(viewer.index))
+                pixelSize: 18
+                tooltip:   qsTr("More")
+                onClicked: moreMenu.popup(moreButton, 0, moreButton.height)
             }
 
             IconButton {
+                visible:   !viewer.trashView
                 text:      qsTr("Move to trash")
                 textColor: "white"
                 pixelSize: 13
                 onClicked: viewer.requestTrash(viewer.index)
             }
         }
+
+        Menu {
+            id: moreMenu
+
+            MenuItem {
+                text:        viewer.hiddenView ? qsTr("Unhide") : qsTr("Hide")
+                onTriggered: library.setHiddenAt(viewer.index, !viewer.hiddenView)
+            }
+
+            MenuItem {
+                text:        qsTr("Show in folder")
+                onTriggered: photosApp.openContainingFolder(library.filePathAt(viewer.index))
+            }
+
+            MenuItem {
+                text:        viewer.video ? qsTr("Open in video player") : qsTr("Open with another app")
+                onTriggered: photosApp.openExternally(library.filePathAt(viewer.index))
+            }
+        }
+    }
+
+    // Info panel
+
+    InfoPanel {
+        id: infoPanel
+
+        anchors.right:  parent.right
+        anchors.top:    topBar.bottom
+        anchors.bottom: parent.bottom
+        width:          Math.min(340, viewer.width * 0.4)
+        visible:        viewer.infoOpen
+        row:            viewer.index
     }
 
     // Previous / next arrows
@@ -430,7 +605,7 @@ FocusScope {
     }
 
     IconButton {
-        anchors.right:          parent.right
+        anchors.right:          stage.right
         anchors.rightMargin:    12
         anchors.verticalCenter: parent.verticalCenter
         visible:                viewer.chrome && (viewer.index + 1 < library.count)
@@ -442,11 +617,74 @@ FocusScope {
 
     // Thumbnail strip, shown with the other controls (toggle: button, T).
 
+    // Video controls, above the thumbnail strip.
+
+    Rectangle {
+        id: videoBar
+
+        anchors.left:         stage.left
+        anchors.right:        stage.right
+        anchors.bottom:       filmstrip.visible ? filmstrip.top : parent.bottom
+        anchors.leftMargin:   Math.max(16, stage.width * 0.15)
+        anchors.rightMargin:  Math.max(16, stage.width * 0.15)
+        anchors.bottomMargin: 8
+        height:               40
+        radius:               20
+        color:                Qt.rgba(0, 0, 0, 0.55)
+        visible:              viewer.inlineVideo && viewer.chrome
+
+        RowLayout {
+            anchors.fill:        parent
+            anchors.leftMargin:  12
+            anchors.rightMargin: 14
+            spacing:             10
+
+            IconButton {
+                text:      (viewer.videoPlayer && viewer.videoPlayer.playing) ? "\u275A\u275A" : "\u25B6"
+                textColor: "white"
+                pixelSize: 14
+                onClicked: viewer.videoPlayer.toggle()
+            }
+
+            Text {
+                text:           viewer.videoPlayer ? viewer.formatTime(viewer.videoPlayer.position) : ""
+                color:          "white"
+                font.pixelSize: 12
+                font.family:    "monospace"
+            }
+
+            Slider {
+                id: seekSlider
+                Layout.fillWidth: true
+                from:             0
+                to:               viewer.videoPlayer ? Math.max(1, viewer.videoPlayer.duration) : 1
+                value:            (viewer.videoPlayer && !pressed) ? viewer.videoPlayer.position : value
+                onMoved:          if (viewer.videoPlayer) viewer.videoPlayer.seek(value)
+                onPressedChanged: viewer.showChrome()
+            }
+
+            Text {
+                text:           viewer.videoPlayer ? viewer.formatTime(viewer.videoPlayer.duration) : ""
+                color:          "white"
+                opacity:        0.7
+                font.pixelSize: 12
+                font.family:    "monospace"
+            }
+
+            IconButton {
+                text:      (viewer.videoPlayer && viewer.videoPlayer.muted) ? qsTr("Unmute") : qsTr("Mute")
+                textColor: "white"
+                pixelSize: 12
+                onClicked: viewer.videoPlayer.muted = !viewer.videoPlayer.muted
+            }
+        }
+    }
+
     Filmstrip {
         id: filmstrip
 
-        anchors.left:   parent.left
-        anchors.right:  parent.right
+        anchors.left:   stage.left
+        anchors.right:  stage.right
         anchors.bottom: parent.bottom
 
         currentIndex:   viewer.index
@@ -477,19 +715,32 @@ FocusScope {
                 else
                     viewer.close()
                 break
-            case Qt.Key_Right:
             case Qt.Key_Space:
+            case Qt.Key_K:
+                if (viewer.inlineVideo)
+                    viewer.videoPlayer.toggle()
+                else
+                    viewer.go(+1)
+                break
+            case Qt.Key_Right:
                 viewer.go(+1)
                 break
             case Qt.Key_Left:
                 viewer.go(-1)
                 break
             case Qt.Key_Delete:
-                viewer.requestTrash(viewer.index)
+                if (viewer.trashView)
+                    viewer.requestDeleteForever(viewer.index)
+                else
+                    viewer.requestTrash(viewer.index)
                 break
             case Qt.Key_F:
             case Qt.Key_L:
-                library.toggleFavoriteAt(viewer.index)
+                if (!viewer.trashView)
+                    library.toggleFavoriteAt(viewer.index)
+                break
+            case Qt.Key_I:
+                viewer.infoOpen = !viewer.infoOpen
                 break
             case Qt.Key_Plus:
             case Qt.Key_Equal:

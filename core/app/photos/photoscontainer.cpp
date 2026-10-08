@@ -43,6 +43,10 @@
 #include "photosgridmodel.h"
 #include "photosimageproviders.h"
 #include "photosgestures.h"
+#include "photosmetadata.h"
+#include "photosimporter.h"
+#include "metaenginesettings.h"
+#include "metaenginesettingscontainer.h"
 #include "thumbnailinfo.h"
 
 namespace Digikam
@@ -59,6 +63,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_previews = new PhotosPreviewLoader(this);
     m_library = new PhotosLibraryModel(this);
     m_grid    = new PhotosGridModel(m_library, this);
+    m_importer = new PhotosImporter(m_library, this);
 
     m_filmstrip = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
                                              .readEntry("Filmstrip", true);
@@ -81,6 +86,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     context->setContextProperty(QLatin1String("library"),   m_library);
     context->setContextProperty(QLatin1String("grid"),      m_grid);
     context->setContextProperty(QLatin1String("photosApp"), this);
+    context->setContextProperty(QLatin1String("importer"),  m_importer);
 
     m_quick->setSource(QUrl(QLatin1String("qrc:/photos/qml/Main.qml")));
 
@@ -146,8 +152,49 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
         }
     );
 
+    // Information kept only in the database so far goes to sidecars, once,
+    // after the start (see PhotosSidecarSync).
+
+    m_sidecarSync = new PhotosSidecarSync(this);
+
+    connect(m_sidecarSync, &PhotosSidecarSync::signalProgressChanged,
+            this, &PhotosContainer::signalSidecarSyncChanged);
+
+    connect(MetaEngineSettings::instance(), &MetaEngineSettings::signalSettingsChanged,
+            this, &PhotosContainer::signalSidecarsChanged);
+
+    QTimer::singleShot(10000, m_sidecarSync, &PhotosSidecarSync::startIfPending);
+
     setCurrentWidget(m_quick);
     m_library->reload();
+}
+
+bool PhotosContainer::sidecars() const
+{
+    return PhotosMetadata::sidecarMode(MetaEngineSettings::instance()->settings());
+}
+
+void PhotosContainer::setSidecars(bool sidecars)
+{
+    if (sidecars == this->sidecars())
+    {
+        return;
+    }
+
+    MetaEngineSettingsContainer settings = MetaEngineSettings::instance()->settings();
+    PhotosMetadata::setSidecarMode(settings, sidecars);
+    MetaEngineSettings::instance()->setSettings(settings);
+    KSharedConfig::openConfig()->sync();
+
+    if (sidecars)
+    {
+        m_sidecarSync->restart();
+    }
+}
+
+int PhotosContainer::sidecarSyncPercent() const
+{
+    return m_sidecarSync ? m_sidecarSync->progress() : -1;
 }
 
 PhotosContainer::~PhotosContainer()

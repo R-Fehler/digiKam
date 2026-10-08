@@ -33,6 +33,7 @@ ${SUDO} apt-get "${APT_OPTS[@]}" install -y --no-install-recommends \
     kf6-extra-cmake-modules qt6-base-dev qt6-base-private-dev qt6-base-dev-tools qt6-declarative-dev \
     qt6-webengine-dev qt6-networkauth-dev qt6-svg-dev qt6-scxml-dev qt6-multimedia-dev \
     qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools qt6-image-formats-plugins qt6-wayland \
+    kf6-kimageformat-plugins \
     libkf6xmlgui-dev libkf6coreaddons-dev libkf6config-dev libkf6service-dev \
     libkf6windowsystem-dev libkf6solid-dev libkf6i18n-dev libkf6iconthemes-dev \
     libkf6notifications-dev libkf6notifyconfig-dev libkf6threadweaver-dev \

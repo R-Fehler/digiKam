@@ -42,6 +42,7 @@
 #include "digikam_debug.h"
 #include "digikamapp.h"
 #include "photoscontainer.h"
+#include "photosmetadata.h"
 #include "thumbnailsize.h"
 
 namespace Digikam
@@ -112,6 +113,19 @@ void PhotosMode::preInitialize(int argc, char** argv)
             album.writeEntry(QLatin1String("Album Monitoring"), true);
             album.writeEntry(QLatin1String("Use Large Thumbs"), true);
             photos.writeEntry(QLatin1String("Defaults Applied"), true);
+            config.sync();
+        }
+
+        // Favorites, albums, captions and people go to XMP sidecars next to
+        // the photos: the library stays readable by other applications and
+        // syncs between devices with the folders (see photosmetadata.h).
+
+        if (config.hasGroup(QLatin1String("Album Settings")) &&
+            !photos.readEntry(QLatin1String("Sidecar Defaults Applied"), false))
+        {
+            KConfigGroup metadata = config.group(QLatin1String("Metadata Settings"));
+            PhotosMetadata::writeSidecarDefaults(metadata);
+            photos.writeEntry(QLatin1String("Sidecar Defaults Applied"), true);
             config.sync();
         }
     }

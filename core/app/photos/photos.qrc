@@ -9,5 +9,10 @@
         <file>qml/IconButton.qml</file>
         <file>qml/AlbumPopup.qml</file>
         <file>qml/Filmstrip.qml</file>
+        <file>qml/ImportSheet.qml</file>
+        <file>qml/ImportsPage.qml</file>
+        <file>qml/SettingsPopup.qml</file>
+        <file>qml/InfoPanel.qml</file>
+        <file>qml/VideoPlayer.qml</file>
     </qresource>
 </RCC>

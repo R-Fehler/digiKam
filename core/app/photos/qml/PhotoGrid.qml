@@ -28,6 +28,7 @@ FocusScope {
     /// row >= 0: that photo only; row == -1: the selection.
     signal requestTrash(int row)
     signal requestAddToAlbum(int row)
+    signal requestDeleteForever(int row)
 
     readonly property int  gap:          2
     // Horizontal pitch of one tile including the seam. Tiles are placed at
@@ -589,6 +590,8 @@ FocusScope {
         readonly property int  itemCount:   onSelection ? library.selectionCount : 1
         readonly property bool allFavorite: onSelection ? library.selectionAllFavorite()
                                                         : library.isFavoriteAt(targetRow)
+        readonly property bool trash:       library.filter === 12
+        readonly property bool hidden:      library.filter === 11
 
         MenuItem {
             text:        qsTr("Open")
@@ -596,6 +599,27 @@ FocusScope {
         }
 
         MenuItem {
+            visible:     contextMenu.trash
+            height:      visible ? implicitHeight : 0
+            text:        (contextMenu.itemCount > 1) ? qsTr("Restore %1 items").arg(contextMenu.itemCount) : qsTr("Restore")
+            onTriggered: {
+                if (contextMenu.onSelection)
+                    library.restoreSelection()
+                else
+                    library.restoreAt(contextMenu.targetRow)
+            }
+        }
+
+        MenuItem {
+            visible:     contextMenu.trash
+            height:      visible ? implicitHeight : 0
+            text:        qsTr("Delete permanently…")
+            onTriggered: gridRoot.requestDeleteForever(contextMenu.onSelection ? -1 : contextMenu.targetRow)
+        }
+
+        MenuItem {
+            visible:     !contextMenu.trash
+            height:      visible ? implicitHeight : 0
             text:        contextMenu.allFavorite ? qsTr("Remove from Favorites") : qsTr("Add to Favorites")
             onTriggered: {
                 if (contextMenu.onSelection)
@@ -606,6 +630,8 @@ FocusScope {
         }
 
         MenuItem {
+            visible:     !contextMenu.trash
+            height:      visible ? implicitHeight : 0
             text:        qsTr("Add to album…")
             onTriggered: gridRoot.requestAddToAlbum(contextMenu.onSelection ? -1 : contextMenu.targetRow)
         }
@@ -623,20 +649,37 @@ FocusScope {
         }
 
         MenuItem {
+            visible:     !contextMenu.trash
+            height:      visible ? implicitHeight : 0
+            text:        contextMenu.hidden ? qsTr("Unhide") : qsTr("Hide")
+            onTriggered: {
+                if (contextMenu.onSelection)
+                    library.setHiddenForSelection(!contextMenu.hidden)
+                else
+                    library.setHiddenAt(contextMenu.targetRow, !contextMenu.hidden)
+            }
+        }
+
+        MenuItem {
             text:        library.isSelectedAt(contextMenu.targetRow) ? qsTr("Deselect") : qsTr("Select")
             onTriggered: library.toggleSelectedAt(contextMenu.targetRow)
         }
 
         MenuItem {
-            visible:     !contextMenu.onSelection
+            visible:     !contextMenu.onSelection && !contextMenu.trash
             height:      visible ? implicitHeight : 0
             text:        qsTr("Show in folder")
             onTriggered: photosApp.openContainingFolder(library.filePathAt(contextMenu.targetRow))
         }
 
-        MenuSeparator { }
+        MenuSeparator {
+            visible: !contextMenu.trash
+            height:  visible ? implicitHeight : 0
+        }
 
         MenuItem {
+            visible:     !contextMenu.trash
+            height:      visible ? implicitHeight : 0
             text:        (contextMenu.itemCount > 1) ? qsTr("Move %1 items to trash").arg(contextMenu.itemCount)
                                                      : qsTr("Move to trash")
             onTriggered: gridRoot.requestTrash(contextMenu.onSelection ? -1 : contextMenu.targetRow)
@@ -655,7 +698,10 @@ FocusScope {
             event.accepted = true
         }
         else if ((event.key === Qt.Key_Delete) && gridRoot.selectionMode) {
-            gridRoot.requestTrash(-1)
+            if (library.filter === 12)
+                gridRoot.requestDeleteForever(-1)
+            else
+                gridRoot.requestTrash(-1)
             event.accepted = true
         }
         else if ((event.key === Qt.Key_Plus) || (event.key === Qt.Key_Equal)) {

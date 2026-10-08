@@ -19,7 +19,10 @@ Rectangle {
     readonly property color separatorColor: Qt.rgba(palette.windowText.r,
                                                     palette.windowText.g,
                                                     palette.windowText.b, 0.12)
-    readonly property bool  selecting:      library.selectionCount > 0
+    readonly property bool  importsPage:    sidebar.page === "imports"
+    readonly property bool  selecting:      (library.selectionCount > 0) && !importsPage
+    readonly property bool  trashView:      library.filter === 12
+    readonly property bool  hiddenView:     library.filter === 11
 
     // Show the background preparation only when it lasts (quick passes over
     // an already prepared library would just flicker).
@@ -53,6 +56,55 @@ Rectangle {
         albumPopup.open()
     }
 
+    // Generic confirmation: title, text, button text and what to do.
+    function confirm(title, text, actionText, action) {
+        confirmDialog.title      = title
+        confirmDialog.text       = text
+        confirmDialog.actionText = actionText
+        confirmDialog.action     = action
+        confirmDialog.open()
+    }
+
+    function requestDeleteForever(row) {
+        const count = (row >= 0) ? 1 : library.selectionCount
+
+        confirm((count === 1) ? qsTr("Delete this photo permanently?")
+                              : qsTr("Delete %L1 photos permanently?").arg(count),
+                qsTr("This cannot be undone."),
+                qsTr("Delete"),
+                () => {
+                    if (row >= 0)
+                        library.deleteForeverAt(row)
+                    else
+                        library.deleteSelectionForever()
+                })
+    }
+
+    function requestUndoImport(importId) {
+        const count = importer.remainingCount(importId)
+
+        if (count === 0) {
+            confirm(qsTr("Nothing to undo"),
+                    qsTr("The photos of this import are no longer in your library."),
+                    qsTr("OK"), null)
+            return
+        }
+
+        confirm(qsTr("Undo this import?"),
+                (count === 1) ? qsTr("The photo of this import still in your library is moved to Recently Deleted.")
+                              : qsTr("The %L1 photos of this import still in your library are moved to Recently Deleted.").arg(count),
+                qsTr("Undo import"),
+                () => {
+                    importer.undoImport(importId)
+                    sidebar.page = "imports"
+                })
+    }
+
+    function showImport(importId) {
+        sidebar.page = "grid"
+        importer.showImport(importId)
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing:      0
@@ -60,7 +112,10 @@ Rectangle {
         Sidebar {
             id: sidebar
             Layout.fillHeight:     true
-            Layout.preferredWidth: 210
+            Layout.preferredWidth: 220
+
+            onImportRequested:   importSheet.open()
+            onSettingsRequested: settingsPopup.open()
         }
 
         Rectangle {
@@ -91,19 +146,34 @@ Rectangle {
                     spacing:                1
 
                     Text {
-                        text:           library.title
+                        text:           root.importsPage ? qsTr("Imports") : library.title
                         color:          palette.windowText
                         font.pixelSize: 20
                         font.bold:      true
                     }
 
                     Text {
-                        text:           library.loading && (library.count === 0)
-                                        ? qsTr("Loading…")
-                                        : (((library.count === 1) ? qsTr("1 item")
-                                                                  : qsTr("%L1 items").arg(library.count))
-                                           + (preparingShown.value ? qsTr(" \u00B7 preparing thumbnails %1%").arg(photosApp.preparingPercent)
-                                                                   : ""))
+                        text: {
+                            if (root.importsPage)
+                                return qsTr("When photos came in, and from which device")
+
+                            let line = library.loading && (library.count === 0)
+                                       ? qsTr("Loading…")
+                                       : ((library.count === 1) ? qsTr("1 item") : qsTr("%L1 items").arg(library.count))
+
+                            if (library.filter === 12)
+                                line += qsTr(" \u00B7 restore them, or delete them permanently")
+                            else if (library.filter === 11)
+                                line += qsTr(" \u00B7 not shown anywhere else")
+
+                            if (preparingShown.value)
+                                line += qsTr(" \u00B7 preparing thumbnails %1%").arg(photosApp.preparingPercent)
+
+                            if (photosApp.sidecarSyncPercent >= 0)
+                                line += qsTr(" \u00B7 saving to sidecar files %1%").arg(photosApp.sidecarSyncPercent)
+
+                            return line
+                        }
                         color:          palette.windowText
                         opacity:        0.6
                         font.pixelSize: 12
@@ -142,7 +212,21 @@ Rectangle {
                     // Selection actions
 
                     IconButton {
-                        visible:   root.selecting
+                        visible:   root.selecting && root.trashView
+                        text:      qsTr("Restore")
+                        pixelSize: 13
+                        onClicked: library.restoreSelection()
+                    }
+
+                    IconButton {
+                        visible:   root.selecting && root.trashView
+                        text:      qsTr("Delete permanently")
+                        pixelSize: 13
+                        onClicked: root.requestDeleteForever(-1)
+                    }
+
+                    IconButton {
+                        visible:   root.selecting && !root.trashView
                         readonly property bool allFavorite: (library.selectionRevision >= 0) &&
                                                             (library.revision >= 0) &&
                                                             library.selectionAllFavorite()
@@ -154,10 +238,17 @@ Rectangle {
                     }
 
                     IconButton {
-                        visible:   root.selecting
+                        visible:   root.selecting && !root.trashView
                         text:      qsTr("Add to album")
                         pixelSize: 13
                         onClicked: root.requestAddToAlbum(-1)
+                    }
+
+                    IconButton {
+                        visible:   root.selecting && !root.trashView
+                        text:      root.hiddenView ? qsTr("Unhide") : qsTr("Hide")
+                        pixelSize: 13
+                        onClicked: library.setHiddenForSelection(!root.hiddenView)
                     }
 
                     IconButton {
@@ -168,23 +259,43 @@ Rectangle {
                     }
 
                     IconButton {
-                        visible:   root.selecting
+                        visible:   root.selecting && !root.trashView
                         text:      qsTr("Move to trash")
                         pixelSize: 13
                         onClicked: root.requestTrash(-1)
                     }
 
+                    // View actions
+
+                    IconButton {
+                        visible:   !root.selecting && !root.importsPage && (library.filter === 4) &&
+                                   (library.filesKey.length > 0)
+                        text:      qsTr("Undo import\u2026")
+                        pixelSize: 13
+                        onClicked: root.requestUndoImport(library.filesKey)
+                    }
+
+                    IconButton {
+                        visible:   !root.selecting && root.trashView && (library.count > 0)
+                        text:      qsTr("Empty\u2026")
+                        pixelSize: 13
+                        onClicked: root.confirm(qsTr("Delete all %L1 photos permanently?").arg(library.count),
+                                                qsTr("This cannot be undone."),
+                                                qsTr("Empty Recently Deleted"),
+                                                () => library.emptyTrash())
+                    }
+
                     // Zoom
 
                     IconButton {
-                        visible:   !root.selecting
+                        visible:   !root.selecting && !root.importsPage
                         text:      "−"
                         tooltip:   qsTr("Smaller tiles")
                         onClicked: photoGrid.zoomStep(+1, photoGrid.height / 2)
                     }
 
                     IconButton {
-                        visible:   !root.selecting
+                        visible:   !root.selecting && !root.importsPage
                         text:      "+"
                         tooltip:   qsTr("Larger tiles")
                         onClicked: photoGrid.zoomStep(-1, photoGrid.height / 2)
@@ -202,11 +313,22 @@ Rectangle {
                 id: photoGrid
                 Layout.fillWidth:  true
                 Layout.fillHeight: true
+                visible:           !root.importsPage
                 focus:             !viewer.visible
 
-                onOpenPhoto:         (index) => viewer.open(index)
-                onRequestTrash:      (row)   => root.requestTrash(row)
-                onRequestAddToAlbum: (row)   => root.requestAddToAlbum(row)
+                onOpenPhoto:            (index) => viewer.open(index)
+                onRequestTrash:         (row)   => root.requestTrash(row)
+                onRequestAddToAlbum:    (row)   => root.requestAddToAlbum(row)
+                onRequestDeleteForever: (row)   => root.requestDeleteForever(row)
+            }
+
+            ImportsPage {
+                Layout.fillWidth:  true
+                Layout.fillHeight: true
+                visible:           root.importsPage
+
+                onShowImport:  (importId) => root.showImport(importId)
+                onRequestUndo: (importId) => root.requestUndoImport(importId)
             }
         }
     }
@@ -238,8 +360,9 @@ Rectangle {
             photoGrid.forceActiveFocus()
         }
 
-        onRequestTrash:      (row) => root.requestTrash(row)
-        onRequestAddToAlbum: (row) => root.requestAddToAlbum(row)
+        onRequestTrash:         (row) => root.requestTrash(row)
+        onRequestAddToAlbum:    (row) => root.requestAddToAlbum(row)
+        onRequestDeleteForever: (row) => root.requestDeleteForever(row)
     }
 
     // --- Shared dialogs -------------------------------------------------------------
@@ -247,6 +370,89 @@ Rectangle {
     AlbumPopup {
         id: albumPopup
         onClosed: (viewer.visible ? viewer : photoGrid).forceActiveFocus()
+    }
+
+    ImportSheet {
+        id: importSheet
+        onShowImport: (importId) => root.showImport(importId)
+        onClosed:     photoGrid.forceActiveFocus()
+    }
+
+    SettingsPopup {
+        id: settingsPopup
+        onClosed: photoGrid.forceActiveFocus()
+    }
+
+    Popup {
+        id: confirmDialog
+
+        property string title:      ""
+        property string text:       ""
+        property string actionText: ""
+        property var    action:     null
+
+        anchors.centerIn: parent
+        width:            380
+        modal:            true
+        focus:            true
+        padding:          20
+
+        background: Rectangle {
+            color:  palette.window
+            radius: 12
+        }
+
+        onClosed: (viewer.visible ? viewer : photoGrid).forceActiveFocus()
+
+        function accept() {
+            const action = confirmDialog.action
+            close()
+
+            if (action)
+                action()
+        }
+
+        Column {
+            width:   parent.width
+            spacing: 12
+
+            Text {
+                width:          parent.width
+                wrapMode:       Text.WordWrap
+                text:           confirmDialog.title
+                color:          palette.windowText
+                font.pixelSize: 16
+                font.bold:      true
+            }
+
+            Text {
+                width:    parent.width
+                wrapMode: Text.WordWrap
+                text:     confirmDialog.text
+                color:    palette.windowText
+                opacity:  0.7
+            }
+
+            Row {
+                anchors.right: parent.right
+                spacing:       8
+
+                Button {
+                    text:      qsTr("Cancel")
+                    onClicked: confirmDialog.close()
+                }
+
+                Button {
+                    id: confirmButton
+                    text:      confirmDialog.actionText
+                    onClicked: confirmDialog.accept()
+                    Keys.onReturnPressed: confirmDialog.accept()
+                    Keys.onEnterPressed:  confirmDialog.accept()
+                }
+            }
+        }
+
+        onOpened: confirmButton.forceActiveFocus()
     }
 
     Popup {

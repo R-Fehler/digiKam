@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
+#include <QRegularExpression>
 #include <QTimer>
 #include <QtConcurrentRun>
 
@@ -34,7 +35,12 @@
 #include "coredbconstants.h"
 #include "coredbfields.h"
 #include "coredbwatch.h"
+#include "captionvalues.h"
 #include "dio.h"
+#include "disjointmetadata.h"
+#include "itemposition.h"
+#include "photoinfocontainer.h"
+#include "videoinfocontainer.h"
 #include "dtrash.h"
 #include "dtrashiteminfo.h"
 #include "fileactionmngr.h"
@@ -57,9 +63,48 @@ QString photosDecodePath(const QString& encoded)
                                                     QByteArray::OmitTrailingEquals));
 }
 
+QString photosPrettyDevice(const QString& make, const QString& model)
+{
+    QString mk = make.simplified();
+    QString md = model.simplified();
+
+    if (md.isEmpty())
+    {
+        return mk;
+    }
+
+    if (mk.isEmpty() || md.startsWith(mk, Qt::CaseInsensitive) ||
+        (mk.compare(QLatin1String("Apple"), Qt::CaseInsensitive) == 0))
+    {
+        return md;
+    }
+
+    static const QRegularExpression suffix(QLatin1String("[ ,]+(corporation|corp\\.?|inc\\.?|co\\.?,? ?ltd\\.?|"
+                                                         "imaging|optical.*|camera|company)$"),
+                                           QRegularExpression::CaseInsensitiveOption);
+    mk.remove(suffix);
+
+    if ((mk == mk.toLower()) || (mk == mk.toUpper()))
+    {
+        mk = mk.left(1).toUpper() + mk.mid(1).toLower();
+    }
+
+    if (md.startsWith(mk, Qt::CaseInsensitive))
+    {
+        return md;
+    }
+
+    return mk + QLatin1Char(' ') + md;
+}
+
 QString PhotosLibraryModel::albumsRootTagName()
 {
     return QLatin1String("Albums");
+}
+
+QString PhotosLibraryModel::hiddenTagName()
+{
+    return QLatin1String("Hidden");
 }
 
 PhotosLibraryModel::PhotosLibraryModel(QObject* const parent)
@@ -79,8 +124,22 @@ PhotosLibraryModel::PhotosLibraryModel(QObject* const parent)
     connect(m_albumsTimer, &QTimer::timeout,
             this, &PhotosLibraryModel::slotReloadAlbums);
 
-    connect(&m_watcher, &QFutureWatcher<QList<PhotosEntry> >::finished,
+    connect(&m_watcher, &QFutureWatcher<QueryResult>::finished,
             this, &PhotosLibraryModel::slotLoaded);
+
+    connect(&m_devicesWatcher, &QFutureWatcher<QVariantList>::finished,
+            this, [this] ()
+        {
+            const QVariantList devices = m_devicesWatcher.result();
+
+            if (devices != m_devices)
+            {
+                m_devices = devices;
+
+                Q_EMIT devicesChanged();
+            }
+        }
+    );
 
     connect(this, &QAbstractItemModel::dataChanged,
             this, [this] ()
@@ -111,6 +170,7 @@ PhotosLibraryModel::PhotosLibraryModel(QObject* const parent)
 PhotosLibraryModel::~PhotosLibraryModel()
 {
     m_watcher.waitForFinished();
+    m_devicesWatcher.waitForFinished();
 }
 
 int PhotosLibraryModel::rowCount(const QModelIndex& parent) const
@@ -216,14 +276,51 @@ void PhotosLibraryModel::setAlbumTagId(int tagId)
     }
 }
 
-void PhotosLibraryModel::showAlbum(int tagId)
+void PhotosLibraryModel::setView(int filter, int tagId)
 {
     m_albumTagId = tagId;
-    m_filter     = Album;
+    m_filter     = filter;
 
     Q_EMIT filterChanged();
 
     reload();
+}
+
+void PhotosLibraryModel::showAlbum(int tagId)
+{
+    setView(Album, tagId);
+}
+
+void PhotosLibraryModel::showDeviceTag(int tagId)
+{
+    setView(DeviceTag, tagId);
+}
+
+void PhotosLibraryModel::showCamera(const QString& make, const QString& model)
+{
+    m_cameraMake  = make;
+    m_cameraModel = model;
+
+    setView(Camera, -1);
+}
+
+void PhotosLibraryModel::showFiles(const QStringList& filePaths, const QString& title, const QString& key)
+{
+    m_files      = QSet<QString>(filePaths.constBegin(), filePaths.constEnd());
+    m_filesTitle = title;
+    m_filesKey   = key;
+
+    setView(Files, -1);
+}
+
+QString PhotosLibraryModel::filesKey() const
+{
+    return (m_filter == Files) ? m_filesKey : QString();
+}
+
+QVariantList PhotosLibraryModel::devices() const
+{
+    return m_devices;
 }
 
 QString PhotosLibraryModel::title() const
@@ -235,6 +332,45 @@ QString PhotosLibraryModel::title() const
 
         case Videos:
             return i18n("Videos");
+
+        case Files:
+            return m_filesTitle;
+
+        case Camera:
+            return photosPrettyDevice(m_cameraMake, m_cameraModel);
+
+        case DeviceTag:
+        {
+            for (const QVariant& device : std::as_const(m_devices))
+            {
+                const QVariantMap map = device.toMap();
+
+                if (map.value(QLatin1String("tagId")).toInt() == m_albumTagId)
+                {
+                    return map.value(QLatin1String("name")).toString();
+                }
+            }
+
+            return i18n("Device");
+        }
+
+        case Screenshots:
+            return i18n("Screenshots");
+
+        case Raw:
+            return i18n("RAW");
+
+        case Panoramas:
+            return i18n("Panoramas");
+
+        case Selfies:
+            return i18n("Selfies");
+
+        case Hidden:
+            return i18n("Hidden");
+
+        case Trash:
+            return i18n("Recently Deleted");
 
         case Album:
         {
@@ -285,14 +421,41 @@ void PhotosLibraryModel::reload()
 
     Q_EMIT loadingChanged();
 
-    m_watcher.setFuture(QtConcurrent::run(&PhotosLibraryModel::queryEntries, m_filter, m_albumTagId));
+    Query query;
+    query.filter      = m_filter;
+    query.tagId       = m_albumTagId;
+    query.make        = m_cameraMake;
+    query.model       = m_cameraModel;
+    query.files       = m_files;
+    query.hiddenTagId = TagsCache::instance()->tagForPath(hiddenTagName());
+
+    m_watcher.setFuture(QtConcurrent::run(&PhotosLibraryModel::queryEntries, query));
 }
 
-QList<PhotosEntry> PhotosLibraryModel::queryEntries(int filter, int albumTagId)
+PhotosLibraryModel::QueryResult PhotosLibraryModel::queryEntries(const Query& query)
 {
+    if (query.filter == Trash)
+    {
+        return queryTrash();
+    }
+
     QString join;
     QString where;
     QList<QVariant> bound;
+    const int filter = query.filter;
+
+    // Screenshots: names given by phones and desktops, or PNG files without camera.
+
+    static const char* const screenshot =
+        "(Images.name LIKE '%screenshot%' OR Images.name LIKE 'Screen Shot%' OR "
+        " Images.name LIKE 'Bildschirmfoto%' OR Images.name LIKE 'Capture d%cran%' OR "
+        " Images.name LIKE 'Schermata%' OR Images.name LIKE 'Captura de pantalla%' OR "
+        " (ImageInformation.format = 'PNG' AND COALESCE(ImageMetadata.make, '') = ''))";
+
+    if ((filter == Camera) || (filter == Screenshots) || (filter == Panoramas) || (filter == Selfies))
+    {
+        join += QLatin1String(" LEFT JOIN ImageMetadata ON ImageMetadata.imageid = Images.id ");
+    }
 
     switch (filter)
     {
@@ -309,10 +472,57 @@ QList<PhotosEntry> PhotosLibraryModel::queryEntries(int filter, int albumTagId)
         }
 
         case Album:
+        case DeviceTag:
         {
-            join  = QLatin1String(" INNER JOIN ImageTags ON ImageTags.imageid = Images.id ");
+            join += QLatin1String(" INNER JOIN ImageTags ON ImageTags.imageid = Images.id ");
             where = QLatin1String(" AND ImageTags.tagid = ?");
-            bound << albumTagId;
+            bound << query.tagId;
+            break;
+        }
+
+        case Hidden:
+        {
+            join += QLatin1String(" INNER JOIN ImageTags ON ImageTags.imageid = Images.id ");
+            where = QLatin1String(" AND ImageTags.tagid = ?");
+            bound << query.hiddenTagId;
+            break;
+        }
+
+        case Camera:
+        {
+            where = QLatin1String(" AND COALESCE(ImageMetadata.make, '') = ? AND COALESCE(ImageMetadata.model, '') = ?");
+            bound << query.make << query.model;
+            break;
+        }
+
+        case Screenshots:
+        {
+            where = QLatin1String(" AND ") + QLatin1String(screenshot);
+            break;
+        }
+
+        case Raw:
+        {
+            where = QLatin1String(" AND ImageInformation.format LIKE 'RAW%'");
+            break;
+        }
+
+        case Panoramas:
+        {
+            // Wide (or tall) photos taken with a camera: tall screenshots are not panoramas.
+
+            where = QLatin1String(" AND ImageInformation.width > 0 AND ImageInformation.height > 0 "
+                                  " AND (ImageInformation.width >= 2 * ImageInformation.height OR "
+                                  "      ImageInformation.height >= 2 * ImageInformation.width) "
+                                  " AND COALESCE(ImageMetadata.make, '') <> '' AND NOT ") + QLatin1String(screenshot);
+            break;
+        }
+
+        case Selfies:
+        {
+            // Phones name the lens: "iPhone 15 Pro front camera 2.69mm f/1.9".
+
+            where = QLatin1String(" AND ImageMetadata.lens LIKE '%front%'");
             break;
         }
 
@@ -326,7 +536,7 @@ QList<PhotosEntry> PhotosLibraryModel::queryEntries(int filter, int albumTagId)
 
     const QString sql = QString::fromLatin1(
         "SELECT Images.id, Images.name, Images.category, Albums.albumRoot, Albums.relativePath, "
-        "       ImageInformation.creationDate, ImageInformation.rating "
+        "       ImageInformation.creationDate, ImageInformation.rating, Images.album "
         "FROM Images "
         "INNER JOIN Albums ON Albums.id = Images.album "
         "LEFT JOIN ImageInformation ON ImageInformation.imageid = Images.id "
@@ -334,14 +544,18 @@ QList<PhotosEntry> PhotosLibraryModel::queryEntries(int filter, int albumTagId)
         "WHERE Images.status = %2 "
         "  AND (Images.category = %3 OR Images.category = %4) "
         "  AND Images.id NOT IN (SELECT subject FROM ImageRelations WHERE type = %5) "
-        "%6 "
+        "%6 %7 "
         "ORDER BY ImageInformation.creationDate DESC, Images.id DESC;")
         .arg(join)
         .arg(int(DatabaseItem::Visible))
         .arg(int(DatabaseItem::Image))
         .arg(int(DatabaseItem::Video))
         .arg(int(DatabaseRelation::Grouped))
-        .arg(where);
+        .arg(where)
+        .arg(((query.hiddenTagId > 0) && (filter != Hidden) && (filter != Files))
+             ? QString::fromLatin1(" AND Images.id NOT IN (SELECT imageid FROM ImageTags WHERE tagid = %1) ")
+                   .arg(query.hiddenTagId)
+             : QString());
 
     QList<QVariant> values;
 
@@ -351,10 +565,49 @@ QList<PhotosEntry> PhotosLibraryModel::queryEntries(int filter, int albumTagId)
     }
 
     QHash<int, QString> rootPaths;
-    QList<PhotosEntry>  entries;
-    entries.reserve(values.size() / 7);
+    QueryResult         result;
+    QList<PhotosEntry>& entries = result.entries;
+    entries.reserve(values.size() / 8);
 
-    for (int i = 0 ; (i + 6) < values.size() ; i += 7)
+    // Live Photos (iPhone) and motion photos saved as two files: a photo and a
+    // short video with the same name in the same folder. Paired from the file
+    // names, as other devices of a synced library see them: the video is
+    // played from the photo, not listed on its own.
+
+    QSet<QString>           photoKeys;
+    QHash<QString, QString> videoNames;     // key -> video file name
+
+    {
+        QList<QVariant> names;
+
+        {
+            CoreDbAccess access;
+            access.backend()->execSql(QString::fromLatin1("SELECT album, name, category FROM Images "
+                                                          "WHERE status = %1 AND (category = %2 OR category = %3);")
+                                          .arg(int(DatabaseItem::Visible))
+                                          .arg(int(DatabaseItem::Image))
+                                          .arg(int(DatabaseItem::Video)), &names);
+        }
+
+        QSet<QString> videoKeys;
+
+        for (int i = 0 ; (i + 2) < names.size() ; i += 3)
+        {
+            const QString name = names.at(i + 1).toString();
+            const QString key  = names.at(i).toString() + QLatin1Char('/') + name.section(QLatin1Char('.'), 0, -2).toLower();
+
+            if (names.at(i + 2).toInt() == DatabaseItem::Video)
+            {
+                videoNames.insert(key, name);
+            }
+            else
+            {
+                photoKeys.insert(key);
+            }
+        }
+    }
+
+    for (int i = 0 ; (i + 7) < values.size() ; i += 8)
     {
         const int rootId = values.at(i + 3).toInt();
 
@@ -382,10 +635,151 @@ QList<PhotosEntry> PhotosLibraryModel::queryEntries(int filter, int albumTagId)
         entry.dateTime = values.at(i + 5).toDateTime();
         entry.rating   = qMax(0, values.at(i + 6).toInt());
 
+        if ((filter == Files) && !query.files.contains(entry.filePath))
+        {
+            continue;
+        }
+
+        const QString name = values.at(i + 1).toString();
+        const QString key  = values.at(i + 7).toString() + QLatin1Char('/') + name.section(QLatin1Char('.'), 0, -2).toLower();
+
+        if (entry.isVideo)
+        {
+            if (photoKeys.contains(key) && (filter != Files))
+            {
+                continue;       // the motion of a Live Photo
+            }
+        }
+        else
+        {
+            const auto video = videoNames.constFind(key);
+
+            if (video != videoNames.constEnd())
+            {
+                entry.livePath = QFileInfo(entry.filePath).path() + QLatin1Char('/') + video.value();
+            }
+        }
+
         entries << entry;
     }
 
-    return entries;
+    return result;
+}
+
+PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash()
+{
+    // Each trashed file has a JSON record with its database id and the deletion time.
+
+    QueryResult result;
+
+    const QStringList roots = CollectionManager::instance()->allAvailableAlbumRootPaths();
+
+    for (const QString& root : roots)
+    {
+        const QDir filesDir(root + QLatin1Char('/') + DTrash::TRASH_FOLDER +
+                            QLatin1Char('/') + DTrash::FILES_FOLDER);
+
+        const auto files = filesDir.entryInfoList(QDir::Files);
+
+        // Sidecars are trashed as entries of their own (same image id): keep
+        // them with their photo, restored or deleted together.
+
+        QList<DTrashItemInfo>          photos;
+        QHash<QString, DTrashItemInfo> sidecars;    // by original path
+
+        for (const QFileInfo& file : files)
+        {
+            DTrashItemInfo info;
+            info.trashPath = file.filePath();
+            DTrash::extractJsonForItem(root, file.baseName(), info);
+
+            if (file.suffix().compare(QLatin1String("xmp"), Qt::CaseInsensitive) == 0)
+            {
+                sidecars.insert(info.collectionPath, info);
+            }
+            else if (info.imageId > 0)
+            {
+                photos << info;
+            }
+        }
+
+        for (const DTrashItemInfo& info : std::as_const(photos))
+        {
+            // Sidecars first: restored before their photo, which is scanned
+            // as soon as it is back (as digiKam moves and copies them first).
+
+            DTrashItemInfoList items;
+
+            const QFileInfo original(info.collectionPath);
+            const QString candidates[] =
+            {
+                info.collectionPath + QLatin1String(".xmp"),
+                info.collectionPath + QLatin1String(".XMP"),
+                original.path() + QLatin1Char('/') + original.completeBaseName() + QLatin1String(".xmp"),
+                original.path() + QLatin1Char('/') + original.completeBaseName() + QLatin1String(".XMP")
+            };
+
+            for (const QString& candidate : candidates)
+            {
+                if (sidecars.contains(candidate))
+                {
+                    items << sidecars.take(candidate);
+                }
+            }
+
+            items << info;
+
+            PhotosEntry entry;
+            entry.id       = info.imageId;
+            entry.filePath = info.trashPath;
+            entry.dateTime = info.deletionTimestamp;
+
+            result.entries << entry;
+            result.trash.insert(info.imageId, items);
+        }
+    }
+
+    if (!result.entries.isEmpty())
+    {
+        QStringList ids;
+
+        for (const PhotosEntry& entry : std::as_const(result.entries))
+        {
+            ids << QString::number(entry.id);
+        }
+
+        QList<QVariant> values;
+
+        {
+            CoreDbAccess access;
+            access.backend()->execSql(QString::fromLatin1("SELECT id, category FROM Images WHERE id IN (%1);")
+                                          .arg(ids.join(QLatin1Char(','))), &values);
+        }
+
+        QSet<qlonglong> videos;
+
+        for (int i = 0 ; (i + 1) < values.size() ; i += 2)
+        {
+            if (values.at(i + 1).toInt() == DatabaseItem::Video)
+            {
+                videos.insert(values.at(i).toLongLong());
+            }
+        }
+
+        for (PhotosEntry& entry : result.entries)
+        {
+            entry.isVideo = videos.contains(entry.id);
+        }
+    }
+
+    std::sort(result.entries.begin(), result.entries.end(),
+              [] (const PhotosEntry& a, const PhotosEntry& b)
+        {
+            return (a.dateTime > b.dateTime);
+        }
+    );
+
+    return result;
 }
 
 void PhotosLibraryModel::slotLoaded()
@@ -394,7 +788,9 @@ void PhotosLibraryModel::slotLoaded()
 
     beginResetModel();
 
-    m_entries = m_watcher.result();
+    const QueryResult result = m_watcher.result();
+    m_entries                = result.entries;
+    m_trashInfos             = result.trash;
 
     // Photos being moved to the trash disappear at once, even if the
     // database does not reflect it yet. Once it does, forget about them.
@@ -477,6 +873,23 @@ QString PhotosLibraryModel::filePathAt(int row) const
     return ((row >= 0) && (row < m_entries.size())) ? m_entries.at(row).filePath : QString();
 }
 
+QUrl PhotosLibraryModel::liveUrlAt(int row) const
+{
+    if ((row < 0) || (row >= m_entries.size()) || m_entries.at(row).livePath.isEmpty())
+    {
+        return QUrl();
+    }
+
+    return QUrl::fromLocalFile(m_entries.at(row).livePath);
+}
+
+QUrl PhotosLibraryModel::fileUrlAt(int row) const
+{
+    const QString path = filePathAt(row);
+
+    return path.isEmpty() ? QUrl() : QUrl::fromLocalFile(path);
+}
+
 QString PhotosLibraryModel::fileNameAt(int row) const
 {
     return QFileInfo(filePathAt(row)).fileName();
@@ -524,7 +937,9 @@ QString PhotosLibraryModel::thumbSourceAt(int row, int size) const
     // The version segment changes when the file changed on disk, so that Qt Quick
     // does not reuse its cached texture.
 
-    return QLatin1String("image://dkthumb/") + QString::number(entry.id)                  +
+    // Trashed files: by path only, the database id points to the original location.
+
+    return QLatin1String("image://dkthumb/") + QString::number((m_filter == Trash) ? 0 : entry.id) +
            QLatin1Char('/') + QString::number(m_thumbVersion.value(entry.filePath, 0)) +
            QLatin1Char('/') + QString::number((size > 0) ? size : m_defaultThumbSize)  +
            QLatin1Char('/') + photosEncodePath(entry.filePath);
@@ -591,6 +1006,153 @@ void PhotosLibraryModel::removeFromCurrentAlbum(int row)
     FileActionMngr::instance()->removeTag(ItemInfo(m_entries.at(row).id), m_albumTagId);
 }
 
+QVariantMap PhotosLibraryModel::infoAt(int row) const
+{
+    QVariantMap map;
+
+    if ((row < 0) || (row >= m_entries.size()))
+    {
+        return map;
+    }
+
+    const PhotosEntry& entry = m_entries.at(row);
+    const ItemInfo info(entry.id);
+    const QLocale locale;
+    const QFileInfo file(entry.filePath);
+
+    map.insert(QLatin1String("dateText"), dateTextAt(row));
+    map.insert(QLatin1String("fileName"), (m_filter == Trash) ? info.name() : file.fileName());
+    map.insert(QLatin1String("folder"),   (m_filter == Trash) ? QString() : QDir::toNativeSeparators(file.path()));
+    map.insert(QLatin1String("size"),     locale.formattedDataSize(file.size(), 1, QLocale::DataSizeTraditionalFormat));
+    map.insert(QLatin1String("caption"),  info.comment());
+    map.insert(QLatin1String("isVideo"),  entry.isVideo);
+
+    const QSize size = info.dimensions();
+
+    if (!size.isEmpty())
+    {
+        map.insert(QLatin1String("dimensions"), QString::fromUtf8("%1 \u00D7 %2").arg(size.width()).arg(size.height()));
+        const double mp = double(size.width()) * size.height() / 1.0e6;
+
+        if (mp >= 0.5)
+        {
+            map.insert(QLatin1String("megapixels"), i18n("%1 MP", locale.toString(mp, 'f', (mp < 10.0) ? 1 : 0)));
+        }
+    }
+
+    map.insert(QLatin1String("format"), info.format().remove(QLatin1String("RAW-")));
+
+    if (entry.isVideo)
+    {
+        const VideoInfoContainer video = info.videoInfoContainer();
+        bool ok                        = false;
+        const int ms                   = video.duration.toInt(&ok);
+
+        if (ok && (ms > 0))
+        {
+            const int secs = ms / 1000;
+            map.insert(QLatin1String("duration"), (secs >= 3600) ? QString::asprintf("%d:%02d:%02d", secs / 3600, (secs / 60) % 60, secs % 60)
+                                                                 : QString::asprintf("%d:%02d", secs / 60, secs % 60));
+        }
+
+        map.insert(QLatin1String("videoCodec"), video.videoCodec);
+        map.insert(QLatin1String("frameRate"),  video.frameRate.isEmpty() ? QString() : i18n("%1 fps", video.frameRate));
+    }
+
+    const PhotoInfoContainer photo = info.photoInfoContainer();
+    map.insert(QLatin1String("camera"),   photosPrettyDevice(photo.make, photo.model));
+    map.insert(QLatin1String("lens"),     photo.lens);
+    map.insert(QLatin1String("aperture"), photo.aperture);
+    map.insert(QLatin1String("exposure"), photo.exposureTime);
+    map.insert(QLatin1String("iso"),      photo.sensitivity);
+    map.insert(QLatin1String("focal"),    photo.focalLength);
+
+    const ItemPosition position = info.imagePosition();
+
+    if (!position.isEmpty() && position.hasCoordinates())
+    {
+        const double lat = position.latitudeNumber();
+        const double lon = position.longitudeNumber();
+
+        map.insert(QLatin1String("latitude"),  lat);
+        map.insert(QLatin1String("longitude"), lon);
+        map.insert(QLatin1String("location"),  QString::fromUtf8("%1\u00B0 %2, %3\u00B0 %4")
+                                                   .arg(locale.toString(qAbs(lat), 'f', 4)).arg((lat >= 0) ? QLatin1Char('N') : QLatin1Char('S'))
+                                                   .arg(locale.toString(qAbs(lon), 'f', 4)).arg((lon >= 0) ? QLatin1Char('E') : QLatin1Char('W')));
+    }
+
+    // Albums, device and place names: tags under "Albums/", "Devices/", "Places/"...
+
+    QStringList albums;
+    QStringList devices;
+    QStringList places;
+    TagsCache* const tags = TagsCache::instance();
+
+    for (const int tagId : info.tagIds())
+    {
+        if (tags->isInternalTag(tagId))
+        {
+            continue;
+        }
+
+        const QString path = tags->tagPath(tagId, TagsCache::NoLeadingSlash);
+
+        if      (path.startsWith(albumsRootTagName() + QLatin1Char('/')))
+        {
+            albums << tags->tagName(tagId);
+        }
+        else if (path.startsWith(QLatin1String("Devices/")))
+        {
+            devices << tags->tagName(tagId);
+        }
+        else if (path.startsWith(QLatin1String("Places/")))
+        {
+            places << path.mid(7).split(QLatin1Char('/')).join(QLatin1String(", "));
+        }
+    }
+
+    map.insert(QLatin1String("albums"),  albums);
+    map.insert(QLatin1String("devices"), devices);
+    map.insert(QLatin1String("places"),  places);
+
+    return map;
+}
+
+void PhotosLibraryModel::setCaptionAt(int row, const QString& caption)
+{
+    if ((row < 0) || (row >= m_entries.size()))
+    {
+        return;
+    }
+
+    const ItemInfo info(m_entries.at(row).id);
+
+    if (info.comment() == caption.trimmed())
+    {
+        return;
+    }
+
+    CaptionValues value;
+    value.caption = caption.trimmed();
+    value.date    = QDateTime::currentDateTime();
+
+    CaptionsMap captions;
+
+    if (!value.caption.isEmpty())
+    {
+        captions.insert(QLatin1String("x-default"), value);
+    }
+
+    // The same path as the caption editor of the classic interface: database,
+    // and files or sidecars according to the metadata settings.
+
+    DisjointMetadata hub;
+    hub.load(info);
+    hub.setComments(captions);
+
+    FileActionMngr::instance()->applyMetadata(QList<ItemInfo>() << info, hub);
+}
+
 void PhotosLibraryModel::slotReloadAlbums()
 {
     QVariantList albums;
@@ -622,6 +1184,91 @@ void PhotosLibraryModel::slotReloadAlbums()
         Q_EMIT albumsChanged();
         Q_EMIT filterChanged();     // album title may have changed
     }
+
+    slotReloadDevices();
+}
+
+/**
+ * Named devices (tags given at import), then the cameras of the EXIF data,
+ * most photos first.
+ */
+static QVariantList queryDevices()
+{
+    QVariantList devices;
+    const int rootTag = TagsCache::instance()->tagForPath(QLatin1String("Devices"));
+
+    QList<QVariant> values;
+
+    if (rootTag > 0)
+    {
+        {
+            CoreDbAccess access;
+            access.backend()->execSql(QString::fromLatin1(
+                "SELECT Tags.id, Tags.name, COUNT(Images.id) FROM Tags "
+                "INNER JOIN ImageTags ON ImageTags.tagid = Tags.id "
+                "INNER JOIN Images ON Images.id = ImageTags.imageid "
+                "WHERE Tags.pid = ? AND Images.status = %1 "
+                "  AND Images.id NOT IN (SELECT subject FROM ImageRelations WHERE type = %2) "
+                "GROUP BY Tags.id, Tags.name ORDER BY COUNT(Images.id) DESC;")
+                .arg(int(DatabaseItem::Visible)).arg(int(DatabaseRelation::Grouped)), rootTag, &values);
+        }
+
+        for (int i = 0 ; (i + 2) < values.size() ; i += 3)
+        {
+            QVariantMap map;
+            map.insert(QLatin1String("kind"),  QLatin1String("tag"));
+            map.insert(QLatin1String("tagId"), values.at(i).toInt());
+            map.insert(QLatin1String("name"),  values.at(i + 1).toString());
+            map.insert(QLatin1String("count"), values.at(i + 2).toInt());
+            devices << map;
+        }
+    }
+
+    values.clear();
+
+    {
+        CoreDbAccess access;
+        access.backend()->execSql(QString::fromLatin1(
+            "SELECT COALESCE(ImageMetadata.make, ''), COALESCE(ImageMetadata.model, ''), COUNT(*) "
+            "FROM ImageMetadata INNER JOIN Images ON Images.id = ImageMetadata.imageid "
+            "WHERE Images.status = %1 "
+            "  AND Images.id NOT IN (SELECT subject FROM ImageRelations WHERE type = %2) "
+            "GROUP BY COALESCE(ImageMetadata.make, ''), COALESCE(ImageMetadata.model, '') "
+            "ORDER BY COUNT(*) DESC;").arg(int(DatabaseItem::Visible)).arg(int(DatabaseRelation::Grouped)), &values);
+    }
+
+    for (int i = 0 ; (i + 2) < values.size() ; i += 3)
+    {
+        const QString make  = values.at(i).toString();
+        const QString model = values.at(i + 1).toString();
+
+        if (make.isEmpty() && model.isEmpty())
+        {
+            continue;
+        }
+
+        QVariantMap map;
+        map.insert(QLatin1String("kind"),  QLatin1String("camera"));
+        map.insert(QLatin1String("make"),  make);
+        map.insert(QLatin1String("model"), model);
+        map.insert(QLatin1String("name"),  photosPrettyDevice(make, model));
+        map.insert(QLatin1String("count"), values.at(i + 2).toInt());
+        devices << map;
+    }
+
+    return devices;
+}
+
+void PhotosLibraryModel::slotReloadDevices()
+{
+    if (m_devicesWatcher.isRunning())
+    {
+        m_albumsTimer->start();
+
+        return;
+    }
+
+    m_devicesWatcher.setFuture(QtConcurrent::run(&queryDevices));
 }
 
 void PhotosLibraryModel::scheduleReload()
@@ -638,6 +1285,7 @@ void PhotosLibraryModel::scheduleReload()
 void PhotosLibraryModel::slotCollectionImageChange(const CollectionImageChangeset&)
 {
     scheduleReload();
+    m_albumsTimer->start();
 }
 
 void PhotosLibraryModel::slotImageChange(const ImageChangeset& changeset)
@@ -666,13 +1314,28 @@ void PhotosLibraryModel::slotImageChange(const ImageChangeset& changeset)
 
 void PhotosLibraryModel::slotImageTagChange(const ImageTagChangeset& changeset)
 {
+    const bool removedAll = (changeset.operation() == ImageTagChangeset::RemovedAll);
+
     if (
-        (m_filter == Album) &&
-        (changeset.containsTag(m_albumTagId) || (changeset.operation() == ImageTagChangeset::RemovedAll))
+        ((m_filter == Album) || (m_filter == DeviceTag)) &&
+        (changeset.containsTag(m_albumTagId) || removedAll)
        )
     {
         scheduleReload();
     }
+
+    // Hiding or showing photos changes every view.
+
+    const int hiddenTag = TagsCache::instance()->tagForPath(hiddenTagName());
+
+    if ((hiddenTag > 0) && (changeset.containsTag(hiddenTag) || removedAll))
+    {
+        scheduleReload();
+    }
+
+    // Device counts.
+
+    m_albumsTimer->start();
 }
 
 void PhotosLibraryModel::slotTagChange(const TagChangeset&)
@@ -1033,17 +1696,17 @@ void PhotosLibraryModel::trashIds(const QList<qlonglong>& ids)
 
     for (const qlonglong id : ids)
     {
-        const int row = m_rowOfId.value(id, -1);
+        const ItemInfo info(id);
 
-        if (row < 0)
+        if (info.isNull())
         {
             continue;
         }
 
-        infos << ItemInfo(id);
+        infos << info;
         m_trashPending.insert(id);
         m_undoIds.insert(id);
-        m_undoRoots.insert(CollectionManager::instance()->albumRootPath(m_entries.at(row).filePath));
+        m_undoRoots.insert(CollectionManager::instance()->albumRootPath(info.filePath()));
         m_selection.remove(id);
     }
 
@@ -1094,6 +1757,11 @@ void PhotosLibraryModel::trashIds(const QList<qlonglong>& ids)
     // The trash job reports nothing when done: refresh once the database changed.
 
     scheduleReload();
+}
+
+void PhotosLibraryModel::trashImageIds(const QList<qlonglong>& ids)
+{
+    trashIds(ids);
 }
 
 void PhotosLibraryModel::undoTrash()
@@ -1153,6 +1821,242 @@ void PhotosLibraryModel::undoTrash()
     {
         DIO::restoreTrash(items);
     }
+}
+
+// --- Hidden photos --------------------------------------------------------------
+
+bool PhotosLibraryModel::isHiddenAt(int row) const
+{
+    // Hidden photos only appear in the Hidden view (and in an import).
+
+    return (m_filter == Hidden) && (row >= 0) && (row < m_entries.size());
+}
+
+void PhotosLibraryModel::setHiddenIds(const QList<qlonglong>& ids, bool hidden)
+{
+    if (ids.isEmpty())
+    {
+        return;
+    }
+
+    QList<ItemInfo> infos;
+
+    for (const qlonglong id : ids)
+    {
+        infos << ItemInfo(id);
+    }
+
+    // A regular tag: written to the sidecars, hence synced, and visible in
+    // stock digiKam as the "Hidden" tag.
+
+    if (hidden)
+    {
+        const int tagId = TagsCache::instance()->getOrCreateTag(hiddenTagName());
+
+        if (tagId > 0)
+        {
+            FileActionMngr::instance()->assignTag(infos, tagId);
+        }
+    }
+    else
+    {
+        const int tagId = TagsCache::instance()->tagForPath(hiddenTagName());
+
+        if (tagId > 0)
+        {
+            FileActionMngr::instance()->removeTag(infos, tagId);
+        }
+    }
+
+    // Leave the current view at once.
+
+    Q_EMIT aboutToReload();
+
+    beginResetModel();
+
+    const QSet<qlonglong> gone(ids.constBegin(), ids.constEnd());
+
+    m_entries.removeIf([&gone] (const PhotosEntry& entry)
+        {
+            return gone.contains(entry.id);
+        }
+    );
+
+    m_rowOfId.clear();
+    m_rowOfPath.clear();
+
+    for (int i = 0 ; i < m_entries.size() ; ++i)
+    {
+        m_rowOfId.insert(m_entries.at(i).id, i);
+        m_rowOfPath.insert(m_entries.at(i).filePath, i);
+    }
+
+    endResetModel();
+
+    m_selection.subtract(gone);
+
+    ++m_revision;
+
+    Q_EMIT revisionChanged();
+    Q_EMIT countChanged();
+    Q_EMIT reloaded();
+
+    emitSelectionChanged();
+}
+
+void PhotosLibraryModel::setHiddenAt(int row, bool hidden)
+{
+    if ((row >= 0) && (row < m_entries.size()))
+    {
+        setHiddenIds(QList<qlonglong>() << m_entries.at(row).id, hidden);
+    }
+}
+
+void PhotosLibraryModel::setHiddenForSelection(bool hidden)
+{
+    QList<qlonglong> ids;
+
+    for (const int row : selectedRows())
+    {
+        ids << m_entries.at(row).id;
+    }
+
+    setHiddenIds(ids, hidden);
+}
+
+// --- Recently Deleted -------------------------------------------------------------
+
+QString PhotosLibraryModel::deletedTextAt(int row) const
+{
+    if ((m_filter != Trash) || (row < 0) || (row >= m_entries.size()))
+    {
+        return QString();
+    }
+
+    const DTrashItemInfoList infos = m_trashInfos.value(m_entries.at(row).id);
+
+    if (infos.isEmpty())
+    {
+        return QString();
+    }
+
+    const DTrashItemInfo& info = infos.constLast();     // the photo, after its sidecars
+    const QLocale locale;
+
+    return i18n("Deleted %1 \u00B7 was %2",
+                locale.toString(info.deletionTimestamp, QLocale::ShortFormat),
+                info.collectionRelativePath);
+}
+
+void PhotosLibraryModel::trashActionIds(const QList<qlonglong>& ids, bool restore)
+{
+    DTrashItemInfoList items;
+
+    for (const qlonglong id : ids)
+    {
+        items << m_trashInfos.value(id);
+    }
+
+    if (items.isEmpty())
+    {
+        return;
+    }
+
+    if (restore)
+    {
+        DIO::restoreTrash(items);
+    }
+    else
+    {
+        DIO::emptyTrash(items);
+    }
+
+    // Leave the view at once; the jobs report nothing when done.
+
+    Q_EMIT aboutToReload();
+
+    beginResetModel();
+
+    const QSet<qlonglong> gone(ids.constBegin(), ids.constEnd());
+
+    m_entries.removeIf([&gone] (const PhotosEntry& entry)
+        {
+            return gone.contains(entry.id);
+        }
+    );
+
+    m_rowOfId.clear();
+    m_rowOfPath.clear();
+
+    for (int i = 0 ; i < m_entries.size() ; ++i)
+    {
+        m_rowOfId.insert(m_entries.at(i).id, i);
+        m_rowOfPath.insert(m_entries.at(i).filePath, i);
+    }
+
+    endResetModel();
+
+    m_selection.subtract(gone);
+
+    ++m_revision;
+
+    Q_EMIT revisionChanged();
+    Q_EMIT countChanged();
+    Q_EMIT reloaded();
+
+    emitSelectionChanged();
+
+    QTimer::singleShot(1500, this, &PhotosLibraryModel::reload);
+}
+
+void PhotosLibraryModel::restoreAt(int row)
+{
+    if ((row >= 0) && (row < m_entries.size()))
+    {
+        trashActionIds(QList<qlonglong>() << m_entries.at(row).id, true);
+    }
+}
+
+void PhotosLibraryModel::restoreSelection()
+{
+    QList<qlonglong> ids;
+
+    for (const int row : selectedRows())
+    {
+        ids << m_entries.at(row).id;
+    }
+
+    trashActionIds(ids, true);
+}
+
+void PhotosLibraryModel::deleteForeverAt(int row)
+{
+    if ((row >= 0) && (row < m_entries.size()))
+    {
+        trashActionIds(QList<qlonglong>() << m_entries.at(row).id, false);
+    }
+}
+
+void PhotosLibraryModel::deleteSelectionForever()
+{
+    QList<qlonglong> ids;
+
+    for (const int row : selectedRows())
+    {
+        ids << m_entries.at(row).id;
+    }
+
+    trashActionIds(ids, false);
+}
+
+void PhotosLibraryModel::emptyTrash()
+{
+    if (m_filter != Trash)
+    {
+        return;
+    }
+
+    trashActionIds(m_trashInfos.keys(), false);
 }
 
 } // namespace Digikam

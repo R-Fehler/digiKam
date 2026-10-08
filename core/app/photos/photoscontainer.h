@@ -35,6 +35,8 @@ class PhotosLibraryModel;
 class PhotosGridModel;
 class PhotosThumbnailBroker;
 class PhotosPreviewLoader;
+class PhotosSidecarSync;
+class PhotosImporter;
 
 class PhotosContainer : public QStackedWidget
 {
@@ -50,6 +52,13 @@ class PhotosContainer : public QStackedWidget
 
     /// Full screen viewer: show the strip of thumbnails at the bottom (saved setting).
     Q_PROPERTY(bool         filmstrip        READ filmstrip        WRITE setFilmstrip NOTIFY signalFilmstripChanged)
+
+    /// Favorites, albums, captions and people are saved to XMP sidecars next
+    /// to the photos (true), or in the library database only (see photosmetadata.h).
+    Q_PROPERTY(bool         sidecars         READ sidecars         WRITE setSidecars  NOTIFY signalSidecarsChanged)
+
+    /// Writing database-only information to sidecars, in percent, or -1 when idle.
+    Q_PROPERTY(int          sidecarSyncPercent READ sidecarSyncPercent NOTIFY signalSidecarSyncChanged)
 
     /// Two or more fingers on the touch screen: lists stop scrolling, a pinch is going on.
     Q_PROPERTY(bool         multiTouch       READ multiTouch       NOTIFY signalMultiTouchChanged)
@@ -68,6 +77,9 @@ public:
     bool         multiTouch()       const;
     bool         filmstrip()        const;
     void         setFilmstrip(bool show);
+    bool         sidecars()         const;
+    void         setSidecars(bool sidecars);
+    int          sidecarSyncPercent() const;
 
     // --- Helpers callable from QML ("photosApp") ---
 
@@ -87,6 +99,8 @@ Q_SIGNALS:
     void signalPreparingChanged();
     void signalMultiTouchChanged();
     void signalFilmstripChanged();
+    void signalSidecarsChanged();
+    void signalSidecarSyncChanged();
 
     /// Touch screen pinch (see PhotosTouchPinch): scale relative to the start,
     /// center in scene coordinates.
@@ -116,6 +130,8 @@ private:
     PhotosGridModel*       m_grid        = nullptr;
     PhotosThumbnailBroker* m_broker      = nullptr;
     PhotosPreviewLoader*   m_previews    = nullptr;
+    PhotosSidecarSync*     m_sidecarSync = nullptr;
+    PhotosImporter*        m_importer    = nullptr;
     QAction*               m_toggle      = nullptr;
     QTimer*                m_pregenTimer = nullptr;
     int                    m_pregeneratedCount = -1;

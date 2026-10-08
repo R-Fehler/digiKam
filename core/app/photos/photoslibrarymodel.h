@@ -23,6 +23,12 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
+#include <QUrl>
+
+// Local includes
+
+#include "dtrashiteminfo.h"
 
 class QTimer;
 
@@ -41,6 +47,7 @@ struct PhotosEntry
     QDateTime dateTime;
     int       rating   = 0;
     bool      isVideo  = false;
+    QString   livePath;     ///< Video of a Live Photo (same name, same folder).
 };
 
 class PhotosLibraryModel : public QAbstractListModel
@@ -54,6 +61,13 @@ class PhotosLibraryModel : public QAbstractListModel
     Q_PROPERTY(QString      title        READ title        NOTIFY filterChanged)
     Q_PROPERTY(QVariantList albums       READ albums       NOTIFY albumsChanged)
 
+    /// Devices the photos come from (QVariantMap: kind "tag" or "camera", name, count,
+    /// tagId or make/model). Named devices are tags given at import (see PhotosImporter).
+    Q_PROPERTY(QVariantList devices      READ devices      NOTIFY devicesChanged)
+
+    /// Files filter: identifies what is shown (e.g. an import id).
+    Q_PROPERTY(QString      filesKey     READ filesKey     NOTIFY filterChanged)
+
     /// Incremented whenever per-photo flags change: lets QML bindings refresh.
     Q_PROPERTY(int          revision     READ revision     NOTIFY revisionChanged)
 
@@ -66,10 +80,19 @@ public:
 
     enum Filter
     {
-        Library   = 0,
-        Favorites = 1,
-        Album     = 2,
-        Videos    = 3
+        Library     = 0,
+        Favorites   = 1,
+        Album       = 2,
+        Videos      = 3,
+        Files       = 4,    ///< A list of files, e.g. the photos of an import.
+        DeviceTag   = 5,    ///< Photos with a "Devices/<name>" tag.
+        Camera      = 6,    ///< Photos taken with a camera make and model (EXIF).
+        Screenshots = 7,
+        Raw         = 8,
+        Panoramas   = 9,
+        Selfies     = 10,
+        Hidden      = 11,
+        Trash       = 12    ///< "Recently Deleted": digiKam's collection trash.
     };
     Q_ENUM(Filter)
 
@@ -90,6 +113,9 @@ public:
     /// Name of the top level tag holding Photos mode albums.
     static QString albumsRootTagName();
 
+    /// Tag hiding photos from all the views but "Hidden".
+    static QString hiddenTagName();
+
 public:
 
     explicit PhotosLibraryModel(QObject* const parent = nullptr);
@@ -107,6 +133,8 @@ public:
     void         setAlbumTagId(int tagId);
     QString      title()      const;
     QVariantList albums()     const;
+    QVariantList devices()    const;
+    QString      filesKey()   const;
     int          revision()   const;
     int          selectionCount()    const;
     int          selectionRevision() const;
@@ -118,10 +146,17 @@ public:
 
     Q_INVOKABLE void      reload();
     Q_INVOKABLE void      showAlbum(int tagId);
+    Q_INVOKABLE void      showDeviceTag(int tagId);
+    Q_INVOKABLE void      showCamera(const QString& make, const QString& model);
+    Q_INVOKABLE void      showFiles(const QStringList& filePaths, const QString& title, const QString& key);
     Q_INVOKABLE qlonglong idAt(int row)                         const;
     Q_INVOKABLE int       rowOfId(qlonglong id)                 const;
     Q_INVOKABLE QString   filePathAt(int row)                   const;
     Q_INVOKABLE QString   fileNameAt(int row)                   const;
+    Q_INVOKABLE QUrl      fileUrlAt(int row)                    const;
+
+    /// The video of a Live Photo, or an empty url.
+    Q_INVOKABLE QUrl      liveUrlAt(int row)                    const;
     Q_INVOKABLE QString   dateTextAt(int row)                   const;
     Q_INVOKABLE bool      isVideoAt(int row)                    const;
     Q_INVOKABLE bool      isFavoriteAt(int row)                 const;
@@ -130,6 +165,12 @@ public:
     Q_INVOKABLE void      toggleFavoriteAt(int row);
     Q_INVOKABLE bool      addToAlbum(int row, const QString& albumName);
     Q_INVOKABLE void      removeFromCurrentAlbum(int row);
+
+    /// Details for the info panel of the viewer (see the implementation for the keys).
+    Q_INVOKABLE QVariantMap infoAt(int row)                     const;
+
+    /// Sets the caption (description), written like the other information.
+    Q_INVOKABLE void      setCaptionAt(int row, const QString& caption);
 
     /// Size used for the ThumbSourceRole of the model (QML passes sizes explicitly).
     void                  setDefaultThumbnailSize(int size);
@@ -162,12 +203,31 @@ public:
     Q_INVOKABLE void       trashAt(int row);
     Q_INVOKABLE void       undoTrash();
 
+    /// Moves these photos to the trash, shown or not (undoable as above).
+    void                   trashImageIds(const QList<qlonglong>& ids);
+
+    // --- Hidden photos ---
+
+    Q_INVOKABLE bool       isHiddenAt(int row)                  const;
+    Q_INVOKABLE void       setHiddenAt(int row, bool hidden);
+    Q_INVOKABLE void       setHiddenForSelection(bool hidden);
+
+    // --- Recently Deleted (Trash filter) ---
+
+    Q_INVOKABLE QString    deletedTextAt(int row)               const;
+    Q_INVOKABLE void       restoreAt(int row);
+    Q_INVOKABLE void       restoreSelection();
+    Q_INVOKABLE void       deleteForeverAt(int row);
+    Q_INVOKABLE void       deleteSelectionForever();
+    Q_INVOKABLE void       emptyTrash();
+
 Q_SIGNALS:
 
     void countChanged();
     void loadingChanged();
     void filterChanged();
     void albumsChanged();
+    void devicesChanged();
     void revisionChanged();
     void selectionChanged();
     void canUndoTrashChanged();
@@ -187,10 +247,35 @@ private Q_SLOTS:
     void slotImageTagChange(const ImageTagChangeset& changeset);
     void slotTagChange(const TagChangeset& changeset);
     void slotReloadAlbums();
+    void slotReloadDevices();
 
 private:
 
-    static QList<PhotosEntry> queryEntries(int filter, int albumTagId);
+public:
+
+    struct Query
+    {
+        int           filter      = Library;
+        int           tagId       = -1;
+        int           hiddenTagId = -1;
+        QString       make;
+        QString       model;
+        QSet<QString> files;
+    };
+
+    struct QueryResult
+    {
+        QList<PhotosEntry>                   entries;
+        QHash<qlonglong, DTrashItemInfoList> trash;     ///< sidecars of the trashed file, then the file
+    };
+
+private:
+
+    static QueryResult queryEntries(const Query& query);
+    static QueryResult queryTrash();
+    void setView(int filter, int tagId);
+    void setHiddenIds(const QList<qlonglong>& ids, bool hidden);
+    void trashActionIds(const QList<qlonglong>& ids, bool restore);
     void refreshRatings(const QList<qlonglong>& ids);
     void scheduleReload();
     void emitSelectionChanged();
@@ -202,7 +287,15 @@ private:
     QList<PhotosEntry>                   m_entries;
     QHash<qlonglong, int>                m_rowOfId;
     QHash<QString, int>                  m_rowOfPath;
-    QFutureWatcher<QList<PhotosEntry> >  m_watcher;
+    QFutureWatcher<QueryResult>          m_watcher;
+    QFutureWatcher<QVariantList>         m_devicesWatcher;
+    QHash<qlonglong, DTrashItemInfoList> m_trashInfos;
+    QVariantList                         m_devices;
+    QString                              m_cameraMake;
+    QString                              m_cameraModel;
+    QSet<QString>                        m_files;
+    QString                              m_filesTitle;
+    QString                              m_filesKey;
     QTimer*                              m_reloadTimer = nullptr;
     QTimer*                              m_albumsTimer = nullptr;
     QVariantList                         m_albums;
@@ -229,5 +322,9 @@ private:
 /// URL helpers shared by the models and the image providers.
 QString photosEncodePath(const QString& filePath);
 QString photosDecodePath(const QString& encoded);
+
+/// Readable device name from EXIF make and model:
+/// "Apple" + "iPhone 15 Pro" -> "iPhone 15 Pro", "samsung" + "SM-S918B" -> "Samsung SM-S918B".
+QString photosPrettyDevice(const QString& make, const QString& model);
 
 } // namespace Digikam
