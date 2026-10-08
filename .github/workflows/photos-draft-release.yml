@@ -43,7 +43,7 @@ jobs:
             tag="${GITHUB_REF_NAME}"
           else
             version=$(gh api "repos/${GH_REPO}/contents/streamline/release/draft-version?ref=${GITHUB_SHA}" \
-                        --jq .content | base64 -d | tr -d '[:space:]')
+                        --jq .content | base64 -d | grep -v '^#' | head -n1 | tr -d '[:space:]')
             tag="photos-v${version#photos-v}"
           fi
           if gh release view "${tag}" > /dev/null 2>&1; then
@@ -75,8 +75,10 @@ jobs:
           RUN_ID: ${{ steps.build.outputs.run_id }}
         run: |
           while true; do
+            # Nothing to read while the job is not created yet.
+            status="" conclusion=""
             read -r status conclusion < <(gh run view "${RUN_ID}" --json jobs \
-              --jq '.jobs[] | select(.name == "linux") | "\(.status) \(.conclusion)"')
+              --jq '.jobs[] | select(.name == "linux") | "\(.status) \(.conclusion)"') || true
             if [ "${status}" = "completed" ]; then
               [ "${conclusion}" = "success" ] && exit 0
               echo "::error::The Linux job of run ${RUN_ID} concluded ${conclusion}"
