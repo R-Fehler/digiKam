@@ -1,0 +1,252 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Build and release digiKam with Photos mode ("digikam --photos").
+#
+#  - Linux:   AppImage, built on Ubuntu 24.04 with Qt / KF6 from KDE neon
+#             (streamline/ci/install-deps-ubuntu.sh, streamline/packaging/linux).
+#  - Windows: NSIS installer, built with KDE Craft like the official digiKam
+#             bundles (streamline/ci/craft-build.py). Experimental.
+#  - macOS:   DMG (Apple Silicon), built with KDE Craft. Experimental, unsigned.
+#
+# Pushes to the development branch update the rolling "photos-continuous"
+# pre-release; pushing a tag "photos-v*" creates a normal release.
+
+name: Photos build and release
+
+on:
+  push:
+    branches:
+      - ccr-f0904072-4betfm
+    tags:
+      - "photos-v*"
+    paths-ignore:
+      - "streamline/docs/**"
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CONTINUOUS_TAG: photos-continuous
+
+jobs:
+
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          major=$(sed -n 's/^set(DIGIKAM_MAJOR_VERSION "\([0-9]*\)")/\1/p' CMakeLists.txt)
+          minor=$(sed -n 's/^set(DIGIKAM_MINOR_VERSION "\([0-9]*\)")/\1/p' CMakeLists.txt)
+          patch=$(sed -n 's/^set(DIGIKAM_PATCH_VERSION "\([0-9]*\)")/\1/p' CMakeLists.txt)
+          if [[ "${GITHUB_REF}" == refs/tags/photos-v* ]]; then
+            version="${GITHUB_REF_NAME#photos-v}"
+          else
+            version="${major}.${minor}.${patch}-photos-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Version: ${version}"
+
+  linux:
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/../ccache
+      CCACHE_MAXSIZE: 3G
+      CCACHE_COMPRESS: "true"
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          sudo docker image prune --all --force > /dev/null || true
+          df -h /
+
+      - name: Install dependencies (KDE neon, Exiv2 0.28)
+        run: sudo streamline/ci/install-deps-ubuntu.sh
+
+      - name: Restore compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-linux-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-linux-${{ github.ref_name }}-
+            ccache-linux-
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -S . -B build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/usr \
+                -DBUILD_TESTING=OFF \
+                -DENABLE_SHOWFOTO=OFF \
+                -DENABLE_GUI_TRANSLATIONS=OFF \
+                -DENABLE_INTERNALMARIADB=OFF \
+                -DBUILD_WITH_CCACHE=ON | tee configure.log
+          grep -q "Photos mode (Qt Quick front-end) will be compiled...... YES" configure.log
+
+      - name: Build
+        id: build
+        run: |
+          ccache -z
+          cmake --build build --parallel "$(nproc)"
+          ccache -s
+
+      # Saved even when a later step fails, so that the next run does not start cold.
+      - name: Save compiler cache
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-linux-${{ github.ref_name }}-${{ github.sha }}
+
+      - name: Unit tests (Photos mode)
+        run: |
+          g++ -std=c++17 -fPIC -I core/app/photos $(pkg-config --cflags Qt6Core) \
+              streamline/tests/cachepolicy_test.cpp $(pkg-config --libs Qt6Core) -o cachepolicy_test
+          ./cachepolicy_test
+
+      - name: Package AppImage
+        env:
+          UPDATE_INFORMATION: gh-releases-zsync|${{ github.repository_owner }}|${{ github.event.repository.name }}|${{ startsWith(github.ref, 'refs/tags/') && 'latest' || env.CONTINUOUS_TAG }}|digiKam-Photos-*x86_64.AppImage.zsync
+        run: streamline/packaging/linux/build-appimage.sh build dist "${VERSION}"
+
+      - name: Smoke test (start Photos mode on a virtual display)
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb xauth > /dev/null
+          export HOME="$(mktemp -d)" QT_FORCE_STDERR_LOGGING=1 APPIMAGE_EXTRACT_AND_RUN=1
+          status=0
+          timeout 60 xvfb-run -a dist/digiKam-Photos-*.AppImage > smoke.log 2>&1 || status=$?
+          tail -n 40 smoke.log
+          # 124: still running after 60 s, i.e. it started and did not crash.
+          if [ "${status}" -ne 124 ]; then
+            echo "::error::digiKam exited with status ${status} during the smoke test"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: |
+            dist/*.AppImage
+            dist/*.zsync
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-2022
+    timeout-minutes: 350
+    continue-on-error: true
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build with KDE Craft
+        shell: pwsh
+        run: |
+          $env:CRAFT_PYTHON = Split-Path (Get-Command python).Source
+          python streamline/ci/craft-build.py --target windows-msvc2022_64-cl --root C:/CR --out dist
+
+      - name: Craft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-craft-logs
+          path: C:/CR/windows-msvc2022_64-cl/logs
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist/*.exe
+            dist/*.sha256
+          if-no-files-found: error
+
+  macos:
+    needs: version
+    runs-on: macos-15
+    timeout-minutes: 350
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build with KDE Craft
+        run: |
+          export LANG=en_US.UTF-8
+          python3 streamline/ci/craft-build.py --target macos-arm-clang --root "${HOME}/CR" --out dist
+
+      - name: Craft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-craft-logs
+          path: ~/CR/macos-arm-clang/logs
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: |
+            dist/*.dmg
+            dist/*.sha256
+          if-no-files-found: error
+
+  release:
+    needs: [version, linux, windows, macos]
+    if: ${{ always() && needs.linux.result == 'success' && github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: "*-{appimage,installer,dmg}"
+          merge-multiple: true
+
+      - name: Publish
+        run: |
+          ls -la dist
+          notes="digiKam with the streamlined Photos mode (\`digikam --photos\`), version ${VERSION}, commit ${GITHUB_SHA}.
+
+          - **Linux**: \`chmod +x digiKam-Photos-*.AppImage\` and run it. Starts in Photos mode; \`--classic\` starts the stock interface. Needs a distribution at least as recent as Ubuntu 24.04 (glibc 2.39).
+          - **Windows / macOS** (when attached): built with KDE Craft, unsigned. Start digiKam with \`--photos\`, or switch with Ctrl+Shift+P.
+
+          Photos mode shares the database, thumbnails and files with stock digiKam; its settings are kept in a separate \`digikam-photosrc\`."
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            gh release create "${GITHUB_REF_NAME}" dist/* --title "digiKam Photos ${VERSION}" --notes "${notes}" --verify-tag
+          else
+            # Runs are not serialized: never replace the release with an older commit.
+            head=$(gh api "repos/${GH_REPO}/commits/${GITHUB_REF_NAME}" --jq .sha)
+            if [ "${head}" != "${GITHUB_SHA}" ]; then
+              echo "${GITHUB_REF_NAME} moved on to ${head}, not publishing ${GITHUB_SHA}"
+              exit 0
+            fi
+            gh release delete "${CONTINUOUS_TAG}" --yes --cleanup-tag || true
+            gh release create "${CONTINUOUS_TAG}" dist/* --target "${GITHUB_SHA}" --prerelease \
+               --title "digiKam Photos (continuous build)" --notes "${notes}"
+          fi

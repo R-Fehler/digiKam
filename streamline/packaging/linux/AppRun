@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# AppImage entry point of digiKam Photos.
+#
+#   ./digiKam-Photos.AppImage [args]            Photos mode (default)
+#   ./digiKam-Photos.AppImage --classic [args]  stock digiKam interface
+#
+# Both share the same databases and files; Photos mode keeps its own
+# settings file (~/.config/digikam-photosrc).
+
+HERE="$(dirname "$(readlink -f "${0}")")"
+
+# Hooks written by linuxdeploy plugins (Qt plugin paths...).
+
+for hook in "${HERE}"/apprun-hooks/*.sh ; do
+    [ -f "${hook}" ] && source "${hook}"
+done
+
+export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export DK_PLUGIN_PATH="${HERE}/usr/plugins/digikam"
+
+# Bundled Qt WebEngine (used by the web service tools and the help browser).
+
+if [ -x "${HERE}/usr/libexec/QtWebEngineProcess" ] ; then
+    export QTWEBENGINEPROCESS_PATH="${HERE}/usr/libexec/QtWebEngineProcess"
+fi
+
+if [ "${1:-}" = "--classic" ] ; then
+    shift
+    exec "${HERE}/usr/bin/digikam" "$@"
+fi
+
+exec "${HERE}/usr/bin/digikam" --photos "$@"
