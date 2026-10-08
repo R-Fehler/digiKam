@@ -96,7 +96,18 @@ def main():
             print("Installed", target)
 
     group("Installing dependencies (KDE binary cache)")
-    run(craftmaster + ["-c", "--install-deps", PACKAGE])
+
+    # Mirrors (MSYS2 on Windows, upstream source archives) sometimes stall;
+    # Craft keeps what it already installed, so a retry is cheap.
+
+    for attempt in range(3):
+        try:
+            run(craftmaster + ["-c", "--install-deps", PACKAGE])
+            break
+        except subprocess.CalledProcessError:
+            if attempt == 2:
+                raise
+            print(f"Installing dependencies failed, retrying ({attempt + 2}/3)", flush=True)
 
     group("Building digiKam")
     run(craftmaster + ["-c", "--no-cache", "--options", src_option, PACKAGE])
