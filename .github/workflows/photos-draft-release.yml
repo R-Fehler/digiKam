@@ -4,6 +4,10 @@
 #
 #   git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
 #
+# or, without pushing a tag, write the version into streamline/release/draft-version
+# and push that on the development branch: the tag photos-v<version> is then
+# created on that commit when the draft is published.
+#
 # Does not rebuild: uses the newest "Photos build and release" run whose commit
 # is the tagged commit or one of its ancestors (later commits that only touch
 # docs do not start a build). The draft is created as soon as that run's Linux
@@ -16,6 +20,10 @@ on:
   push:
     tags:
       - "photos-v*"
+    branches:
+      - ccr-f0904072-4betfm
+    paths:
+      - "streamline/release/draft-version"
 
 permissions:
   contents: write
@@ -28,8 +36,23 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      TAG: ${{ github.ref_name }}
     steps:
+      - name: Release tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            version=$(gh api "repos/${GH_REPO}/contents/streamline/release/draft-version?ref=${GITHUB_SHA}" \
+                        --jq .content | base64 -d | tr -d '[:space:]')
+            tag="photos-v${version#photos-v}"
+          fi
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            echo "::error::A release ${tag} already exists"
+            exit 1
+          fi
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+          echo "Release tag: ${tag}"
+
       - name: Find the build of the tagged commit
         id: build
         run: |
@@ -100,7 +123,12 @@ jobs:
           }
           declare -f streamline_notes > notes-fn.sh
           streamline_notes > notes.md
-          gh release create "${TAG}" dist/* --draft --prerelease --verify-tag \
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            target=(--verify-tag)
+          else
+            target=(--target "${GITHUB_SHA}")    # Tag created when the draft is published.
+          fi
+          gh release create "${TAG}" dist/* --draft --prerelease "${target[@]}" \
              --title "digiKam Photos ${TAG#photos-v}" --notes-file notes.md
 
       - name: Add the Windows and macOS packages

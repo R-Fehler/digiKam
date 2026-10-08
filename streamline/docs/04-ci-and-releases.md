@@ -7,7 +7,7 @@ releases.
 | Trigger | Result |
 |---|---|
 | Push to the development branch | Build on all three systems; the rolling pre-release `photos-continuous` is replaced by the new build |
-| Push of a tag `photos-v<version>` | A **draft** release `digiKam Photos <version>` with the packages of that commit's build (no rebuild) |
+| Push of a tag `photos-v<version>`, or a change of `streamline/release/draft-version` | A **draft** release `digiKam Photos <version>` with the packages of that commit's build (no rebuild) |
 | Any run | Every package is also attached to the run as an artifact |
 
 A pre-release is published only when the Linux job succeeds. Windows and
@@ -20,6 +20,11 @@ To make a release:
 ```sh
 git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
 ```
+
+or, where you can only push the branch, put the version into
+`streamline/release/draft-version` and push it. The tag
+`photos-v<version>` is then created on that commit when you publish the
+draft.
 
 `.github/workflows/photos-draft-release.yml` then picks the build of the
 tagged commit, or of its newest built ancestor when the later commits only

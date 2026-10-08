@@ -9,8 +9,9 @@
 #  - macOS:   DMG (Apple Silicon), built with KDE Craft. Experimental, unsigned.
 #
 # Pushes to the development branch update the rolling "photos-continuous"
-# pre-release. Pushing a tag "photos-v*" drafts a release from these packages
-# without rebuilding (photos-draft-release.yml).
+# pre-release. A tag "photos-v*" or a change of streamline/release/draft-version
+# drafts a release from these packages without rebuilding
+# (photos-draft-release.yml).
 
 name: Photos build and release
 
@@ -22,6 +23,7 @@ on:
       - "streamline/docs/**"
       - "**.md"
       - ".github/workflows/photos-draft-release.yml"
+      - "streamline/release/**"
   workflow_dispatch:
 
 permissions:
