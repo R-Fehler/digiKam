@@ -40,6 +40,7 @@
 #include "photoslibrarymodel.h"
 #include "photosgridmodel.h"
 #include "photosimageproviders.h"
+#include "photosgestures.h"
 #include "thumbnailinfo.h"
 
 namespace Digikam
@@ -168,6 +169,11 @@ int PhotosContainer::preparingPercent() const
     return m_preparingPercent;
 }
 
+bool PhotosContainer::multiTouch() const
+{
+    return m_multiTouch;
+}
+
 bool PhotosContainer::photosActive() const
 {
     return (currentWidget() == m_quick);
@@ -210,6 +216,62 @@ void PhotosContainer::applyChrome(bool photos)
 
 bool PhotosContainer::eventFilter(QObject* watched, QEvent* event)
 {
+    // Touchpad pinch: see photosForwardNativeGesture().
+
+    if ((watched == m_quick) && photosForwardNativeGesture(m_quick, event))
+    {
+        return true;
+    }
+
+    // Touch screen pinch: see photosTouchPointCount(), PhotosTouchPinch and
+    // photosDeliverTouch(). The events still reach the Qt Quick scene (taps,
+    // scrolling...).
+
+    const int touchPoints = ((watched == m_quick) && !m_deliveringTouch) ? photosTouchPointCount(event) : -1;
+
+    if (touchPoints >= 0)
+    {
+        if ((touchPoints >= 2) != m_multiTouch)
+        {
+            m_multiTouch = (touchPoints >= 2);
+
+            Q_EMIT signalMultiTouchChanged();
+        }
+
+        const PhotosTouchPinch::Step step = m_touchPinch.handle(event);
+
+        switch (step.phase)
+        {
+            case PhotosTouchPinch::Started:
+            {
+                Q_EMIT touchPinchStarted(step.center.x(), step.center.y());
+                break;
+            }
+
+            case PhotosTouchPinch::Updated:
+            {
+                Q_EMIT touchPinchUpdated(step.scale, step.center.x(), step.center.y());
+                break;
+            }
+
+            case PhotosTouchPinch::Finished:
+            {
+                Q_EMIT touchPinchFinished();
+                break;
+            }
+
+            default:
+            {
+                break;
+            }
+        }
+    }
+
+    if ((watched == m_quick) && photosDeliverTouch(m_quick, event, &m_deliveringTouch))
+    {
+        return true;
+    }
+
     if ((watched == m_quick) && (event->type() == QEvent::ShortcutOverride))
     {
         // The classic main window binds plain keys (Escape, arrows, +/-...) and

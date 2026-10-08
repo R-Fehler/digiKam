@@ -13,6 +13,8 @@ FocusScope {
     property real panX:     0.0
     property real panY:     0.0
     property bool chrome:   true
+    property real pinchStartZoom: 1.0
+    property real pinchEndTime: 0   // ms, see the swipe in the drag handler
 
     readonly property real maxZoom:     12.0
     readonly property int  previewSize: Math.min(3840, Math.ceil(Math.max(Screen.width, Screen.height)
@@ -80,6 +82,20 @@ FocusScope {
         panY       = py - (py - panY) * k
         zoom       = newZoom
         clampPan()
+    }
+
+    // Touch screen pinch, recognized in C++ (photosApp.touchPinch*): x, y in the scene.
+    function touchPinch(phase, scale, sceneX, sceneY) {
+        if (phase === 0) {
+            pinchStartZoom = zoom
+        }
+        else if (phase === 1) {
+            const p = stage.mapFromItem(null, sceneX, sceneY)
+            zoomAt(pinchStartZoom * scale, p.x, p.y)
+        }
+        else {
+            pinchEndTime = Date.now()
+        }
     }
 
     function showChrome() {
@@ -215,22 +231,26 @@ FocusScope {
             }
         }
 
+        // Touchpad pinch (native gestures, forwarded by PhotosContainer).
+        // Touch screen pinch is recognized in C++, see touchPinch().
+
         PinchHandler {
-            target: null
-            property real startZoom: 1.0
+            target:          null
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
 
             onActiveChanged: {
                 if (active)
-                    startZoom = viewer.zoom
+                    viewer.pinchStartZoom = viewer.zoom
             }
 
-            onActiveScaleChanged: viewer.zoomAt(startZoom * activeScale,
+            onActiveScaleChanged: viewer.zoomAt(viewer.pinchStartZoom * activeScale,
                                                 centroid.position.x, centroid.position.y)
         }
 
         DragHandler {
             id: drag
-            target: null
+            target:  null
+            enabled: !photosApp.multiTouch     // two fingers: a pinch, not a pan or swipe
             property real lastX: 0
             property real lastY: 0
 
@@ -238,6 +258,9 @@ FocusScope {
                 if (active) {
                     lastX = centroid.position.x
                     lastY = centroid.position.y
+                }
+                else if (photosApp.multiTouch || (Date.now() - viewer.pinchEndTime < 400)) {
+                    // Released because a pinch started, or the last finger of one: no swipe.
                 }
                 else if (viewer.zoom <= 1.0) {
                     // Swipe to the next / previous photo when not zoomed.

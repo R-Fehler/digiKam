@@ -117,6 +117,10 @@ jobs:
           g++ -std=c++17 -fPIC -I core/app/photos $(pkg-config --cflags Qt6Core) \
               streamline/tests/cachepolicy_test.cpp $(pkg-config --libs Qt6Core) -o cachepolicy_test
           ./cachepolicy_test
+          # Pinch to zoom through the QQuickWidget (touchpad gestures, touch screen).
+          g++ -std=c++17 -fPIC -I core/app/photos streamline/tests/gesture_test.cpp \
+              $(pkg-config --cflags --libs Qt6QuickWidgets Qt6Quick Qt6Test Qt6Widgets) -o gesture_test
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./gesture_test
 
       - name: Package AppImage
         env:

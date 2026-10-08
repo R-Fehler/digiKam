@@ -114,7 +114,21 @@ fi
 export QMAKE
 export QML_SOURCES_PATHS="${SRC_DIR}/core/app/photos/qml"
 export EXTRA_QT_MODULES="svg;"
+
+# Native Wayland: touch and touchpad gestures (pinch) need it, XWayland does
+# not forward them. Qt picks it on Wayland sessions, xcb elsewhere.
+export EXTRA_PLATFORM_PLUGINS="libqwayland.so;libqxcb.so"
 export LD_LIBRARY_PATH="$(find "${APPDIR}/usr" -name "libdigikamcore.so*" -printf "%h\n" | head -n1):${LD_LIBRARY_PATH:-}"
+
+# OpenGL (EGL) on Wayland: linuxdeploy-plugin-qt deploys the Wayland shell
+# and decoration plugins with libqwayland.so, but not this one.
+
+QT_PLUGINS_DIR="$("${QMAKE}" -query QT_INSTALL_PLUGINS)"
+
+if [ -d "${QT_PLUGINS_DIR}/wayland-graphics-integration-client" ] ; then
+    mkdir -p "${APPDIR}/usr/plugins"
+    cp -r "${QT_PLUGINS_DIR}/wayland-graphics-integration-client" "${APPDIR}/usr/plugins/"
+fi
 
 # Plugins are loaded at run time: their libraries have to be collected explicitly.
 
@@ -122,7 +136,8 @@ DEPLOY_ARGS=()
 
 while IFS= read -r -d '' plugin ; do
     DEPLOY_ARGS+=("--deploy-deps-only=${plugin}")
-done < <(find "${APPDIR}/usr/plugins/digikam" -name "*.so" -print0)
+done < <(find "${APPDIR}/usr/plugins/digikam" "${APPDIR}/usr/plugins/wayland-graphics-integration-client" \
+              -name "*.so" -print0 2> /dev/null)
 
 export LDAI_OUTPUT="digiKam-Photos-${VERSION}-${ARCH}.AppImage"
 

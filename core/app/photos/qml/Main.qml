@@ -211,6 +211,23 @@ Rectangle {
         }
     }
 
+    // Touch screen pinch (recognized in C++) goes to whichever view is shown.
+    Connections {
+        target: photosApp
+
+        function onTouchPinchStarted(x, y) {
+            (viewer.visible ? viewer : photoGrid).touchPinch(0, 1.0, x, y)
+        }
+
+        function onTouchPinchUpdated(scale, x, y) {
+            (viewer.visible ? viewer : photoGrid).touchPinch(1, scale, x, y)
+        }
+
+        function onTouchPinchFinished() {
+            (viewer.visible ? viewer : photoGrid).touchPinch(2, 1.0, 0, 0)
+        }
+    }
+
     Viewer {
         id: viewer
         anchors.fill: parent

@@ -18,6 +18,10 @@
 #include <QString>
 #include <QVariantList>
 
+// Local includes
+
+#include "photosgestures.h"
+
 class QAction;
 class QTimer;
 class QQuickWidget;
@@ -43,6 +47,9 @@ class PhotosContainer : public QStackedWidget
     /// Background thumbnail generation progress in percent, or -1 when idle.
     Q_PROPERTY(int          preparingPercent READ preparingPercent NOTIFY signalPreparingChanged)
 
+    /// Two or more fingers on the touch screen: lists stop scrolling, a pinch is going on.
+    Q_PROPERTY(bool         multiTouch       READ multiTouch       NOTIFY signalMultiTouchChanged)
+
 public:
 
     explicit PhotosContainer(DigikamApp* const app, ItemIconView* const classicView);
@@ -54,6 +61,7 @@ public:
 
     QVariantList thumbnailSizes()   const;
     int          preparingPercent() const;
+    bool         multiTouch()       const;
 
     // --- Helpers callable from QML ("photosApp") ---
 
@@ -65,6 +73,13 @@ Q_SIGNALS:
 
     void signalPhotosActiveChanged();
     void signalPreparingChanged();
+    void signalMultiTouchChanged();
+
+    /// Touch screen pinch (see PhotosTouchPinch): scale relative to the start,
+    /// center in scene coordinates.
+    void touchPinchStarted(qreal x, qreal y);
+    void touchPinchUpdated(qreal scale, qreal x, qreal y);
+    void touchPinchFinished();
 
 protected:
 
@@ -91,6 +106,9 @@ private:
     QTimer*                m_pregenTimer = nullptr;
     int                    m_pregeneratedCount = -1;
     int                    m_preparingPercent  = -1;
+    bool                   m_multiTouch        = false;
+    bool                   m_deliveringTouch   = false;
+    PhotosTouchPinch       m_touchPinch;
 };
 
 } // namespace Digikam

@@ -95,6 +95,33 @@ FocusScope {
         zoomAnimation.restart()
     }
 
+    // Pinch: one zoom step each time the fingers moved 25% apart / together.
+    // scale: relative to the start of the pinch; anchorY: in the view.
+    function pinchStarted() {
+        pinchBase = 1.0
+    }
+
+    function pinchScaled(scale, anchorY) {
+        const ratio = scale / pinchBase
+
+        if (ratio > 1.25) {
+            zoomStep(-1, anchorY)
+            pinchBase = scale
+        }
+        else if (ratio < 0.8) {
+            zoomStep(+1, anchorY)
+            pinchBase = scale
+        }
+    }
+
+    // Touch screen pinch, recognized in C++ (photosApp.touchPinch*): x, y in the scene.
+    function touchPinch(phase, scale, sceneX, sceneY) {
+        if (phase === 0)
+            pinchStarted()
+        else if (phase === 1)
+            pinchScaled(scale, list.mapFromItem(null, sceneX, sceneY).y)
+    }
+
     // Converts a position in the list content item to the visible view.
     function contentToView(contentPosition) {
         return list.mapFromItem(list.contentItem, contentPosition.x, contentPosition.y)
@@ -116,8 +143,7 @@ FocusScope {
     }
 
     function endTouchSelection() {
-        touchSelecting   = false
-        list.interactive = true
+        touchSelecting = false
     }
 
     // Converts a position in the list content item to a y in the visible view.
@@ -224,6 +250,10 @@ FocusScope {
         // thumbnails are already requested before they scroll into view.
         cacheBuffer:           Math.max(0, Math.round(height * 1.5))
 
+        // Touch: no scrolling while a long press selects, nor with two fingers
+        // down (a pinch, see photosTouchPointCount() in photosgestures.h).
+        interactive:           !gridRoot.touchSelecting && !photosApp.multiTouch
+
         boundsBehavior:        Flickable.StopAtBounds
         flickDeceleration:     4000
         maximumFlickVelocity:  8000
@@ -297,7 +327,7 @@ FocusScope {
             }
         }
 
-        // Ctrl + wheel (or pinch on touchpads) changes the tile size.
+        // Ctrl + wheel, or pinch, changes the tile size.
         // Handlers declared in a Flickable live in its content item: their
         // positions are content coordinates, see viewY().
 
@@ -309,23 +339,15 @@ FocusScope {
             }
         }
 
+        // Touchpad pinch (native gestures, forwarded by PhotosContainer).
+        // Touch screen pinch is recognized in C++, see touchPinch().
+
         PinchHandler {
-            target: null
+            target:          null
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
 
-            onActiveChanged: gridRoot.pinchBase = 1.0
-
-            onActiveScaleChanged: {
-                const ratio = activeScale / gridRoot.pinchBase
-
-                if (ratio > 1.25) {
-                    gridRoot.zoomStep(-1, gridRoot.viewY(centroid.position))
-                    gridRoot.pinchBase = activeScale
-                }
-                else if (ratio < 0.8) {
-                    gridRoot.zoomStep(+1, gridRoot.viewY(centroid.position))
-                    gridRoot.pinchBase = activeScale
-                }
-            }
+            onActiveChanged:      if (active) gridRoot.pinchStarted()
+            onActiveScaleChanged: gridRoot.pinchScaled(activeScale, gridRoot.viewY(centroid.position))
         }
 
         // Touch: a tap opens, a long press selects. Finger drags are left to the
@@ -363,8 +385,7 @@ FocusScope {
                 gridRoot.touchAnchor    = photo
                 gridRoot.touchX         = p.x
                 gridRoot.touchY         = p.y
-                gridRoot.touchSelecting = true
-                list.interactive        = false      // the finger now selects instead of scrolling
+                gridRoot.touchSelecting = true       // the finger now selects instead of scrolling
                 library.beginBandSelection(true)
             }
         }
