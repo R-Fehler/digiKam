@@ -964,6 +964,11 @@ bool PhotosLibraryModel::isFavoriteAt(int row) const
     return ((row >= 0) && (row < m_entries.size())) ? (m_entries.at(row).rating >= FavoriteMinRating) : false;
 }
 
+void PhotosLibraryModel::setImportDevices(const QHash<QString, QString>& deviceOfPath)
+{
+    m_importDevices = deviceOfPath;
+}
+
 void PhotosLibraryModel::setDefaultThumbnailSize(int size)
 {
     m_defaultThumbSize = size;
@@ -1153,6 +1158,13 @@ QVariantMap PhotosLibraryModel::infoAt(int row) const
         {
             places << path.mid(7).split(QLatin1Char('/')).join(QLatin1String(", "));
         }
+    }
+
+    const QString imported = m_importDevices.value(entry.filePath);
+
+    if (!imported.isEmpty() && !devices.contains(imported))
+    {
+        devices.prepend(imported);
     }
 
     map.insert(QLatin1String("albums"),  albums);

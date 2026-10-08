@@ -109,6 +109,10 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_importer  = new PhotosImporter(m_library, this);
     m_libraries = new PhotosLibraries(this);
 
+    // Read by the Qt Quick scene as soon as it loads.
+
+    m_sidecarVisibility = new PhotosSidecarVisibility(this);
+
     m_filmstrip = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
                                              .readEntry("Filmstrip", true);
 
@@ -204,6 +208,9 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
 
     connect(m_sidecarSync, &PhotosSidecarSync::signalProgressChanged,
             this, &PhotosContainer::signalSidecarSyncChanged);
+
+    connect(m_sidecarVisibility, &PhotosSidecarVisibility::signalHiddenChanged,
+            this, &PhotosContainer::signalHideSidecarsChanged);
 
     connect(MetaEngineSettings::instance(), &MetaEngineSettings::signalSettingsChanged,
             this, &PhotosContainer::signalSidecarsChanged);
@@ -343,6 +350,16 @@ void PhotosContainer::setSidecars(bool sidecars)
     {
         m_sidecarSync->restart();
     }
+}
+
+bool PhotosContainer::hideSidecars() const
+{
+    return m_sidecarVisibility->hidden();
+}
+
+void PhotosContainer::setHideSidecars(bool hide)
+{
+    m_sidecarVisibility->setHidden(hide);
 }
 
 int PhotosContainer::sidecarSyncPercent() const

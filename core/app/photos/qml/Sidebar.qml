@@ -239,18 +239,39 @@ Rectangle {
                 // --- Devices: named at import, or the cameras of the photos -----
 
                 SectionTitle {
-                    visible: library.devices.length > 0
+                    visible: (importer.devices.length + library.devices.length) > 0
                     text:    qsTr("Devices")
                 }
 
+                // Named at import (from the import records).
                 Repeater {
-                    model: library.devices
+                    model: importer.devices
+
+                    delegate: NavItem {
+                        required property var modelData
+
+                        glyph:       "\u260E"
+                        label:       modelData.name
+                        detail:      Number(modelData.count).toLocaleString(Qt.locale(), "f", 0)
+                        selected:    (sidebar.page === "grid") && (library.filter === 4) &&
+                                     (library.filesKey === "device:" + modelData.name)
+                        onActivated: {
+                            sidebar.page = "grid"
+                            importer.showDevice(modelData.name)
+                        }
+                    }
+                }
+
+                // Device tags of earlier versions, and the cameras of the EXIF data.
+                Repeater {
+                    model: library.devices.filter((d) => (d.kind !== "tag") ||
+                                                         !importer.devices.some((n) => n.name === d.name))
 
                     delegate: NavItem {
                         required property var modelData
                         readonly property bool named: modelData.kind === "tag"
 
-                        glyph:       named ? "☎" : "◎"
+                        glyph:       named ? "\u260E" : "\u25CE"
                         label:       modelData.name
                         detail:      Number(modelData.count).toLocaleString(Qt.locale(), "f", 0)
                         selected:    (sidebar.page === "grid") &&

@@ -18,6 +18,7 @@
 #include <QAtomicInt>
 #include <QDateTime>
 #include <QFutureWatcher>
+#include <QHash>
 #include <QObject>
 #include <QStringList>
 #include <QVariantList>
@@ -34,9 +35,10 @@ class PhotosLibraryModel;
  * can do. Files already in the library (same digiKam file hash and size) are
  * skipped, so importing the same phone again only brings the new photos.
  *
- * The photos of an import get the tag "Devices/<device name>": this tells
- * apart the phones of a family, even of the same model, and is written to
- * the sidecars with the other information (see PhotosMetadata).
+ * Each import records the device name given ("Anna's iPhone"): this tells
+ * apart the phones of a family, even of the same model. It is kept in the
+ * import record only, not in the photos' metadata, so that importing does
+ * not create a sidecar for every photo (see devices()).
  *
  * Each import is recorded in a small JSON file in the hidden
  * "<collection>/.photos-imports/" folder: the history follows the library
@@ -68,6 +70,10 @@ class PhotosImporter : public QObject
     /// Past imports, newest first (QVariantMap: id, date, dateText, device, count, undone, source).
     Q_PROPERTY(QVariantList history      READ history      NOTIFY historyChanged)
 
+    /// Devices named at import (QVariantMap: name, count of their files still there).
+    /// A file moved or renamed outside Photos mode leaves its device.
+    Q_PROPERTY(QVariantList devices      READ devices      NOTIFY devicesChanged)
+
 public:
 
     enum State
@@ -80,7 +86,7 @@ public:
     };
     Q_ENUM(State)
 
-    /// Name of the top level tag holding the device tags.
+    /// Name of the top level tag of the device tags written by earlier versions.
     static QString devicesRootTagName();
 
 public:
@@ -97,6 +103,7 @@ public:
     void         setImportFolder(const QString& folder);
     QStringList  libraryFolders() const;
     QVariantList history()        const;
+    QVariantList devices()        const;
 
     // --- QML API ---
 
@@ -119,6 +126,9 @@ public:
     /// Shows the photos of an import in the grid.
     Q_INVOKABLE void    showImport(const QString& importId);
 
+    /// Shows the photos imported from a device.
+    Q_INVOKABLE void    showDevice(const QString& name);
+
     /// Moves the photos of an import still in the library to the trash.
     /// Returns the number of photos moved.
     Q_INVOKABLE int     undoImport(const QString& importId);
@@ -133,6 +143,7 @@ Q_SIGNALS:
     void progressChanged();
     void importFolderChanged();
     void historyChanged();
+    void devicesChanged();
 
     /// An import finished (also when canceled after some files).
     void imported(const QString& importId, int count);
@@ -156,6 +167,12 @@ public:
         bool             canceled = false;
     };
 
+    struct DeviceCount
+    {
+        QVariantList            devices;
+        QHash<QString, QString> deviceOfPath;
+    };
+
     struct ImportResult
     {
         QStringList      copied;    ///< relative to the import folder
@@ -169,6 +186,7 @@ private:
     void setState(State state);
     void slotScanned();
     void slotImported();
+    void slotDevicesCounted();
 
     QVariantMap readImport(const QString& importId, QString* const filePath = nullptr) const;
     QStringList importedPaths(const QVariantMap& record)                                const;
@@ -189,6 +207,10 @@ private:
     QDateTime                      m_startTime;
     QFutureWatcher<ScanResult>     m_scanWatcher;
     QFutureWatcher<ImportResult>   m_importWatcher;
+    QFutureWatcher<DeviceCount>    m_devicesWatcher;
+    QHash<QString, QStringList>    m_deviceFiles;
+    QVariantList                   m_devices;
+    bool                           m_devicesPending = false;
     QObject*                       m_progressTimer = nullptr;
 };
 

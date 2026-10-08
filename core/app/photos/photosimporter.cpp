@@ -55,12 +55,10 @@
 #include "coredbconstants.h"
 #include "dimg.h"
 #include "dmetadata.h"
-#include "fileactionmngr.h"
 #include "iteminfo.h"
 #include "metaengine.h"
 #include "photoslibrarymodel.h"
 #include "scancontroller.h"
-#include "tagscache.h"
 
 namespace Digikam
 {
@@ -368,6 +366,42 @@ PhotosImporter::ImportResult importFiles(const QList<PhotosImporter::Candidate>&
     return result;
 }
 
+PhotosImporter::DeviceCount countDeviceFiles(const QHash<QString, QStringList>& deviceFiles)
+{
+    PhotosImporter::DeviceCount result;
+
+    for (auto it = deviceFiles.constBegin() ; it != deviceFiles.constEnd() ; ++it)
+    {
+        int count = 0;
+
+        for (const QString& path : it.value())
+        {
+            if (QFileInfo::exists(path))
+            {
+                result.deviceOfPath.insert(path, it.key());
+                ++count;
+            }
+        }
+
+        if (count > 0)
+        {
+            QVariantMap device;
+            device.insert(QLatin1String("name"),  it.key());
+            device.insert(QLatin1String("count"), count);
+            result.devices << device;
+        }
+    }
+
+    std::sort(result.devices.begin(), result.devices.end(),
+              [] (const QVariant& a, const QVariant& b)
+        {
+            return (a.toMap().value(QLatin1String("count")).toInt() > b.toMap().value(QLatin1String("count")).toInt());
+        }
+    );
+
+    return result;
+}
+
 } // namespace
 
 QString PhotosImporter::devicesRootTagName()
@@ -387,6 +421,9 @@ PhotosImporter::PhotosImporter(PhotosLibraryModel* const library, QObject* const
 
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::finished,
             this, &PhotosImporter::slotImported);
+
+    connect(&m_devicesWatcher, &QFutureWatcher<DeviceCount>::finished,
+            this, &PhotosImporter::slotDevicesCounted);
 
     QTimer* const timer = new QTimer(this);
     timer->setInterval(100);
@@ -414,6 +451,7 @@ PhotosImporter::~PhotosImporter()
     m_cancel.storeRelaxed(1);
     m_scanWatcher.waitForFinished();
     m_importWatcher.waitForFinished();
+    m_devicesWatcher.waitForFinished();
 }
 
 QVariantList PhotosImporter::sources() const
@@ -758,20 +796,8 @@ void PhotosImporter::slotImported()
 
     if (!result.copied.isEmpty())
     {
-        // Device tag, written to the sidecars along with the rest.
-
-        if (!m_deviceName.isEmpty() && !result.ids.isEmpty())
-        {
-            const int tagId = TagsCache::instance()->getOrCreateTag(devicesRootTagName() +
-                                                                    QLatin1Char('/') + m_deviceName);
-
-            if (tagId > 0)
-            {
-                FileActionMngr::instance()->assignTags(result.ids, QList<int>() << tagId);
-            }
-        }
-
-        // History record.
+        // History record, with the device: photos nobody touches get no
+        // sidecar (see devices()).
 
         importId = m_startTime.toString(QLatin1String("yyyyMMdd-HHmmss")) + QLatin1Char('-') +
                    QString::number(QRandomGenerator::global()->bounded(0x10000), 16);
@@ -837,6 +863,7 @@ void PhotosImporter::reset()
 void PhotosImporter::reloadHistory()
 {
     QVariantList history;
+    QHash<QString, QStringList> deviceFiles;
     const QLocale locale;
 
     const QStringList roots = libraryFolders();
@@ -881,6 +908,18 @@ void PhotosImporter::reloadHistory()
             entry.insert(QLatin1String("count"),    record.value(QLatin1String("files")).toArray().size());
             entry.insert(QLatin1String("undone"),   record.contains(QLatin1String("undone")));
             history << entry;
+
+            const QString device = record.value(QLatin1String("device")).toString();
+
+            if (!device.isEmpty())
+            {
+                QStringList& paths = deviceFiles[device];
+
+                for (const QJsonValue& file : record.value(QLatin1String("files")).toArray())
+                {
+                    paths << root + QLatin1Char('/') + file.toString();
+                }
+            }
         }
     }
 
@@ -898,6 +937,49 @@ void PhotosImporter::reloadHistory()
 
         Q_EMIT historyChanged();
     }
+
+    // Devices: which files are still there (in the background, stat calls).
+
+    m_deviceFiles = deviceFiles;
+
+    if (m_devicesWatcher.isRunning())
+    {
+        m_devicesPending = true;
+
+        return;
+    }
+
+    m_devicesWatcher.setFuture(QtConcurrent::run(&countDeviceFiles, deviceFiles));
+}
+
+QVariantList PhotosImporter::devices() const
+{
+    return m_devices;
+}
+
+void PhotosImporter::slotDevicesCounted()
+{
+    const DeviceCount result = m_devicesWatcher.result();
+
+    if (result.devices != m_devices)
+    {
+        m_devices = result.devices;
+
+        Q_EMIT devicesChanged();
+    }
+
+    m_library->setImportDevices(result.deviceOfPath);
+
+    if (m_devicesPending)
+    {
+        m_devicesPending = false;
+        m_devicesWatcher.setFuture(QtConcurrent::run(&countDeviceFiles, m_deviceFiles));
+    }
+}
+
+void PhotosImporter::showDevice(const QString& name)
+{
+    m_library->showFiles(m_deviceFiles.value(name), name, QLatin1String("device:") + name);
 }
 
 QVariantMap PhotosImporter::readImport(const QString& importId, QString* const filePath) const

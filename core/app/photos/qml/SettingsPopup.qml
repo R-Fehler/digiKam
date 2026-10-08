@@ -65,9 +65,28 @@ Popup {
 
         Note {
             Layout.leftMargin: 28
-            text: qsTr("Each photo gets a small “.xmp” file beside it. The photos themselves are never changed. "
-                       + "Other apps (Lightroom, darktable, digiKam) read these files, and they sync with your "
-                       + "folders to your other computers.")
+            text: qsTr("A photo with a favorite, album, caption or person gets a small \u201C.xmp\u201D file beside it. "
+                       + "The photos themselves are never changed. Other apps (darktable, digiKam) read these files, "
+                       + "and they sync with your folders to your other computers.")
+        }
+
+        Switch {
+            Layout.leftMargin: 24
+            enabled:   photosApp.sidecars
+            text:      qsTr("Hide sidecar files in file managers")
+            checked:   photosApp.hideSidecars
+            onToggled: photosApp.hideSidecars = checked
+        }
+
+        Note {
+            Layout.leftMargin: 28
+            text: ((Qt.platform.os === "windows")
+                  ? qsTr("Sets the hidden attribute: Explorer shows them only with \u201CHidden items\u201D.")
+                  : (Qt.platform.os === "osx")
+                    ? qsTr("Sets Finder\u2019s hidden flag: Finder shows them only after Cmd+Shift+.")
+                    : qsTr("Lists them in a \u201C.hidden\u201D file per folder, which GNOME Files, Dolphin "
+                           + "and other file managers follow."))
+                  + qsTr(" Other apps still read them; the files keep their names.")
         }
 
         RadioButton {

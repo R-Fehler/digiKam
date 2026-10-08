@@ -14,7 +14,7 @@ digiKam's database is a cache built from these files. Stock digiKam reads all of
 |---|---|---|
 | Favorite ♥ | Rating 5 (`xmp:Rating`) | Sidecar |
 | Album | Tag `Albums/<name>` | Sidecar (`digiKam:TagsList`, `dc:subject`, `lr:hierarchicalSubject`) |
-| Device | Tag `Devices/<name>`, set at import | Sidecar |
+| Device | Import record (device name + imported files) | Import record; not in the photos' metadata |
 | Hidden | Tag `Hidden` | Sidecar |
 | Caption | Comment (`dc:description`, `exif:UserComment`) | Sidecar |
 | People, place, date changes | Face regions (MWG), GPS, date | Sidecar |
@@ -48,7 +48,7 @@ All tests ran in the test container.
 
 - **Catch-up:** the 5 favorites and the album photo of the test library got sidecars with `xmp:Rating="5"` and `Albums/Summer 2026`.
 - **Simulated second computer:** `xmp:Rating="5"` was added to a sidecar from outside, then Photos mode was restarted. The rating was in the database after the start-up scan.
-- **Restore from Recently Deleted:** restored photos are new database entries. Their device tags and caption came back from the restored sidecars.
+- **Restore from Recently Deleted:** restored photos are new database entries. Their tags and caption came back from the restored sidecars.
 
 ## Import
 
@@ -68,7 +68,7 @@ All tests ran in the test container.
    - XMP sidecars from the source come along.
    - Each file is copied under a hidden temporary name and then renamed, so scans and folder monitoring never see a partial file. The file date is kept.
    - Each file is added to the database right away (`ScanController::scannedInfo`).
-   - Every imported photo gets the tag `Devices/<device name>`, which is written to its sidecar.
+   - The device name is kept in the import record, not written to the photos: importing creates no sidecars.
 4. **Done.** The sheet offers **Show** for the photos of this import. A cancelled import keeps what was copied and is recorded.
 
 The import folder is one of digiKam's collections (Settings → Import into); collections themselves are managed in the classic interface.
@@ -88,7 +88,7 @@ The records are small JSON files in `<library folder>/.photos-imports/`. They ar
 
 The sidebar lists:
 
-- **named devices**: the device names given at import ("Anna's iPhone", "Ben's phone"). These tell apart phones of the same model, which EXIF alone cannot;
+- **named devices**: the device names given at import ("Anna's iPhone", "Ben's phone"). These tell apart phones of the same model, which EXIF alone cannot. They come from the import records, which sync with the library, so every computer has them. A photo moved or renamed outside Photos mode leaves its device. `Devices/<name>` tags written by an earlier preview are still listed, merged by name;
 - **cameras**: every camera make and model found in EXIF ("iPhone 15 Pro", "Samsung SM-S918B"), also for photos that were never imported through Photos mode.
 
 Each entry shows its number of photos, and devices without photos are not listed. Make and model are made readable: "Apple" + "iPhone 15 Pro" becomes "iPhone 15 Pro", and "samsung" + "SM-S918B" becomes "Samsung SM-S918B".
@@ -213,7 +213,7 @@ These all call the command above.
 **Visibility.** Sidecars are ordinary, visible files: `IMG_1234.HEIC.xmp` next to `IMG_1234.HEIC`.
 
 - They cannot simply be renamed to hidden dot-files: no other application would read `.IMG_1234.HEIC.xmp`.
-- They are written only for photos with information: favorites, albums, captions, people, hidden, and currently the device tag of imported photos.
+- They are written only for photos with information: favorites, albums, captions, people, hidden. Importing creates none.
 - The hidden folders (`.dtrash`, `.photos-imports`) are hidden on Linux and macOS by their name. On Windows Photos mode sets the hidden attribute on them.
 
 What other applications do with a library folder (unverified points marked):
@@ -228,20 +228,33 @@ What other applications do with a library folder (unverified points marked):
 | Immich, PhotoPrism (self-hosted) | Yes | Read XMP sidecars, both naming schemes (unverified here). Exclude `**/.dtrash/**` from their scans. |
 | Apple Photos (import), Google Photos, OneDrive / iCloud upload | Imported | Not read by the cloud services; Apple Photos import of sidecars unverified |
 
-**Ways to reduce the clutter (open decision).**
+**Hiding them in file managers (optional).** Settings → "Hide sidecar files in file managers" hides them without renaming them, so other applications still read them:
 
-- **Device names in the import records instead of a tag.** Photos you never touch then have no sidecar. The cost: other applications don't see the device, and moving files outside Photos loses it.
-- **Hide sidecars in file managers without renaming them:**
-  - Windows: hidden attribute;
-  - macOS: `chflags hidden`;
-  - GNOME Files and Dolphin: a `.hidden` file listing them.
+| Platform | How |
+|---|---|
+| Windows | The hidden attribute (Explorer shows them with "Hidden items") |
+| macOS | Finder's hidden flag (`UF_HIDDEN`, as `chflags hidden`; Cmd+Shift+. shows them) |
+| Linux | A `.hidden` file per folder listing them, followed by GNOME Files, Dolphin and other file managers; the user's own entries in it are kept |
 
-  Other applications still read them. These marks don't travel with synced files, so Photos mode would set them on each computer.
-- **Write into the photo files** (JPEG, PNG, TIFF). No extra files, but the originals change (backups, syncs, hashes), and HEIC and videos would still need sidecars. Not recommended.
+How it is applied:
+- It runs for all library folders when switched on, and again 15 s after each start, which covers sidecars synced from other computers.
+- After a favorite, album or caption change, or a new or rescanned file, it runs for that photo's folder, 3 s later.
+- Switching it off clears the marks, removes the sidecar entries from `.hidden` files, and deletes `.hidden` files left empty.
+
+Attributes and flags don't travel with synced files, which is why each computer applies them again. `.hidden` files do travel, and only Linux file managers read them.
+
+**Writing into the photo files** instead (JPEG, PNG, TIFF) would avoid extra files, but change the originals (backups, syncs, hashes), and HEIC and videos would still need sidecars. Not offered.
+
+Tested in the container:
+- importing 8 photos added no sidecars, and the device showed in the sidebar, its view and the Info panel;
+- switching hiding on wrote `.hidden` files listing exactly the sidecars of each folder;
+- a sidecar created by a new favorite was added to `.hidden` within seconds;
+- switching it off removed the sidecar entries and kept a user entry.
 
 ## Known gaps
 
 - **Phones on Windows and macOS.** They are not mounted as folders: an iPhone appears as an MTP or Apple device, not a drive. A phone sync app (PhotoSync, Syncthing, Nextcloud, OneDrive) can put the photos in a folder, which is then imported or set as the import source. digiKam's gphoto2 camera import could reach them on Linux and macOS, and is not wired to Photos mode yet.
 - **"Delete from the phone after import"** is not offered yet.
 - **Counts.** Device counts include the videos of Live Photos.
+- **Import views list Live Photo videos.** The view of an import or of a device lists every imported file, including the video of a Live Photo.
 - **Videos written while scanned.** A video still being written when folder monitoring scans it, for example one recorded straight into the library, gets no duration and size until it changes again. Imports are not affected: they copy under a temporary name.

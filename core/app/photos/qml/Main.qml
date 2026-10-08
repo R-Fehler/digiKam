@@ -366,7 +366,7 @@ Rectangle {
 
                     IconButton {
                         visible:   !root.selecting && !root.importsPage && (library.filter === 4) &&
-                                   (library.filesKey.length > 0)
+                                   (library.filesKey.length > 0) && !library.filesKey.startsWith("device:")
                         text:      qsTr("Undo import\u2026")
                         pixelSize: 13
                         onClicked: root.requestUndoImport(library.filesKey)

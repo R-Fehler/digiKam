@@ -182,6 +182,9 @@ public:
     /// Size used for the ThumbSourceRole of the model (QML passes sizes explicitly).
     void                  setDefaultThumbnailSize(int size);
 
+    /// Device of imported files (from the import records, see PhotosImporter).
+    void                  setImportDevices(const QHash<QString, QString>& deviceOfPath);
+
     /// Called when a thumbnail file changed on disk: makes tiles request it again.
     void                  invalidateThumbnail(const QString& filePath);
 
@@ -305,6 +308,7 @@ private:
     QString                              m_filesTitle;
     QString                              m_filesKey;
     QString                              m_folder;
+    QHash<QString, QString>              m_importDevices;
     QTimer*                              m_reloadTimer = nullptr;
     QTimer*                              m_albumsTimer = nullptr;
     QVariantList                         m_albums;

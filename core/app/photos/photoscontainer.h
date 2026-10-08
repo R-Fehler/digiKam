@@ -36,6 +36,7 @@ class PhotosGridModel;
 class PhotosThumbnailBroker;
 class PhotosPreviewLoader;
 class PhotosSidecarSync;
+class PhotosSidecarVisibility;
 class PhotosImporter;
 class PhotosLibraries;
 
@@ -57,6 +58,9 @@ class PhotosContainer : public QStackedWidget
     /// Favorites, albums, captions and people are saved to XMP sidecars next
     /// to the photos (true), or in the library database only (see photosmetadata.h).
     Q_PROPERTY(bool         sidecars         READ sidecars         WRITE setSidecars  NOTIFY signalSidecarsChanged)
+
+    /// Sidecar files hidden in file managers (see PhotosSidecarVisibility).
+    Q_PROPERTY(bool         hideSidecars     READ hideSidecars     WRITE setHideSidecars NOTIFY signalHideSidecarsChanged)
 
     /// Writing database-only information to sidecars, in percent, or -1 when idle.
     Q_PROPERTY(int          sidecarSyncPercent READ sidecarSyncPercent NOTIFY signalSidecarSyncChanged)
@@ -81,6 +85,8 @@ public:
     bool         sidecars()         const;
     void         setSidecars(bool sidecars);
     int          sidecarSyncPercent() const;
+    bool         hideSidecars()     const;
+    void         setHideSidecars(bool hide);
 
     // --- Helpers callable from QML ("photosApp") ---
 
@@ -112,6 +118,7 @@ Q_SIGNALS:
     void signalFilmstripChanged();
     void signalSidecarsChanged();
     void signalSidecarSyncChanged();
+    void signalHideSidecarsChanged();
 
     /// Touch screen pinch (see PhotosTouchPinch): scale relative to the start,
     /// center in scene coordinates.
@@ -146,6 +153,7 @@ private:
     PhotosThumbnailBroker* m_broker      = nullptr;
     PhotosPreviewLoader*   m_previews    = nullptr;
     PhotosSidecarSync*     m_sidecarSync = nullptr;
+    PhotosSidecarVisibility* m_sidecarVisibility = nullptr;
     PhotosImporter*        m_importer    = nullptr;
     PhotosLibraries*       m_libraries   = nullptr;
     QStringList            m_pendingPaths;

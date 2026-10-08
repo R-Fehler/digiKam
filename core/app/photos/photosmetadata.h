@@ -17,6 +17,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QStringList>
 
 class KConfigGroup;
 
@@ -89,6 +90,59 @@ private:
 
     QPointer<ProgressItem> m_tool;
     int                    m_progress = -1;
+};
+
+/**
+ * Optionally hides the sidecars in file managers, without renaming them
+ * (other applications still read them):
+ *
+ *  - Windows: the hidden file attribute;
+ *  - macOS:   the hidden flag of Finder (UF_HIDDEN, as "chflags hidden");
+ *  - Linux:   the ".hidden" file of each folder, a list of names hidden by
+ *             GNOME Files, Dolphin and others; entries of the user are kept.
+ *
+ * Attributes and flags do not travel with synced files: each computer
+ * applies them again (at start, then for each sidecar written). ".hidden"
+ * files do travel, and are only read by Linux file managers.
+ */
+class PhotosSidecarVisibility : public QObject
+{
+    Q_OBJECT
+
+public:
+
+    explicit PhotosSidecarVisibility(QObject* const parent = nullptr);
+    ~PhotosSidecarVisibility() override;
+
+    bool hidden() const;
+
+    /// Saves the setting and hides or shows the sidecars of all library folders.
+    void setHidden(bool hidden);
+
+    /// Applies the setting to the folders of these files, a bit later
+    /// (their sidecars may still be being written).
+    void scheduleFolders(const QStringList& filePaths);
+
+    /// Hides or shows the sidecars of one folder (not its subfolders).
+    static void applyToFolder(const QString& folder, bool hide);
+
+    /// Same, for a folder and all its subfolders.
+    static void applyToTree(const QString& root, bool hide);
+
+Q_SIGNALS:
+
+    void signalHiddenChanged();
+
+private:
+
+    void applyAll();
+    void slotApplyScheduled();
+
+private:
+
+    bool          m_hidden = false;
+    QStringList   m_scheduled;
+    QObject*      m_timer  = nullptr;
 };
 
 } // namespace Digikam
