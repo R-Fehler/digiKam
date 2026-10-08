@@ -56,6 +56,13 @@ int main()
     // Unknown memory figures: unchanged.
     check(nextMaxCostKiB(budget, 1 * GiB, budget, 0, -1) == budget, "unknown memory: unchanged");
 
+    // Preview cache (full screen viewer).
+
+    check(previewBudgetKiB(0)         == 256 * MiB,  "previews, unknown memory: 256 MiB");
+    check(previewBudgetKiB(2 * GiB)   == 256 * MiB,  "previews, 2 GiB RAM: lower bound 256 MiB");
+    check(previewBudgetKiB(16 * GiB)  == 1 * GiB,    "previews, 16 GiB RAM: 1 GiB");
+    check(previewBudgetKiB(64 * GiB)  == 2 * GiB,    "previews, 64 GiB RAM: upper bound 2 GiB");
+
     std::printf("%s\n", failures ? "FAILED" : "all passed");
 
     return failures ? 1 : 0;

@@ -16,6 +16,10 @@ FocusScope {
     property real pinchStartZoom: 1.0
     property real pinchEndTime: 0   // ms, see the swipe in the drag handler
 
+    // Scrolling through the thumbnail strip: show thumbnails only, decode the
+    // preview of the photo the strip stops on.
+    readonly property bool scrubbing: filmstrip.scrubbing
+
     readonly property real maxZoom:     12.0
     readonly property int  previewSize: Math.min(3840, Math.ceil(Math.max(Screen.width, Screen.height)
                                                                  * Screen.devicePixelRatio))
@@ -45,6 +49,8 @@ FocusScope {
     function open(i) {
         index   = i
         visible = true
+        filmstrip.center()
+        prefetchTimer.restart()
         resetZoom()
         forceActiveFocus()
         showChrome()
@@ -52,6 +58,7 @@ FocusScope {
 
     function close() {
         visible = false
+        photosApp.prefetchPreviews(-1, 0)       // drop the neighbours being decoded
         closed(index)
     }
 
@@ -98,6 +105,18 @@ FocusScope {
         }
     }
 
+    // Neighbours are decoded ahead in C++ (PhotosPreviewLoader), so going to
+    // them is instant. Slightly delayed: skipping through photos quickly (keys,
+    // filmstrip) does not queue decodes for every photo passed.
+    onIndexChanged: if (visible) prefetchTimer.restart()
+    onScrubbingChanged: if (!scrubbing && visible) prefetchTimer.restart()
+
+    Timer {
+        id: prefetchTimer
+        interval: 120
+        onTriggered: if (viewer.visible && !viewer.scrubbing) photosApp.prefetchPreviews(viewer.index, viewer.previewSize)
+    }
+
     function showChrome() {
         chrome = true
         chromeTimer.restart()
@@ -138,16 +157,17 @@ FocusScope {
                 visible:      previewLayer.status !== Image.Ready
             }
 
-            // 2. Screen sized preview (embedded preview when large enough).
+            // 2. Screen sized preview (embedded preview when large enough),
+            //    usually already decoded ahead (see prefetchPreviews()). Shown
+            //    at about its own size: no mipmaps to generate on each photo.
             Image {
                 id: previewLayer
                 anchors.fill: parent
-                source:       (viewer.index >= 0) && !viewer.video
+                source:       (viewer.index >= 0) && !viewer.video && !viewer.scrubbing
                               ? library.previewSourceAt(viewer.index, viewer.previewSize) : ""
                 fillMode:     Image.PreserveAspectFit
                 asynchronous: true
                 smooth:       true
-                mipmap:       true
                 visible:      !fullLayer.visible
             }
 
@@ -204,21 +224,6 @@ FocusScope {
                 cursorShape:  Qt.PointingHandCursor
                 onClicked:    photosApp.openExternally(library.filePathAt(viewer.index))
             }
-        }
-
-        // Preload neighbours so that next / previous are instant.
-        Image {
-            visible:      false
-            asynchronous: true
-            source:       viewer.visible && (viewer.index + 1 < library.count) && !library.isVideoAt(viewer.index + 1)
-                          ? library.previewSourceAt(viewer.index + 1, viewer.previewSize) : ""
-        }
-
-        Image {
-            visible:      false
-            asynchronous: true
-            source:       viewer.visible && (viewer.index > 0) && !library.isVideoAt(viewer.index - 1)
-                          ? library.previewSourceAt(viewer.index - 1, viewer.previewSize) : ""
         }
 
         // --- Input ---------------------------------------------------------
@@ -303,7 +308,12 @@ FocusScope {
     Timer {
         id: chromeTimer
         interval: 2500
-        onTriggered: viewer.chrome = false
+        onTriggered: {
+            if (filmstrip.hovered || filmstrip.scrubbing)
+                restart()
+            else
+                viewer.chrome = false
+        }
     }
 
     Rectangle {
@@ -359,6 +369,14 @@ FocusScope {
             anchors.rightMargin:    8
             anchors.verticalCenter: parent.verticalCenter
             spacing:                4
+
+            IconButton {
+                text:      qsTr("Thumbnails")
+                textColor: "white"
+                pixelSize: 13
+                opacity:   photosApp.filmstrip ? 1.0 : 0.55
+                onClicked: photosApp.filmstrip = !photosApp.filmstrip
+            }
 
             IconButton {
                 text:      viewer.favorite ? "♥" : "♡"
@@ -422,6 +440,32 @@ FocusScope {
         onClicked:              viewer.go(+1)
     }
 
+    // Thumbnail strip, shown with the other controls (toggle: button, T).
+
+    Filmstrip {
+        id: filmstrip
+
+        anchors.left:   parent.left
+        anchors.right:  parent.right
+        anchors.bottom: parent.bottom
+
+        currentIndex:   viewer.index
+        opacity:        (photosApp.filmstrip && viewer.chrome) ? 1.0 : 0.0
+        visible:        opacity > 0.0
+
+        Behavior on opacity {
+            NumberAnimation { duration: 200 }
+        }
+
+        onActivated: (i) => {
+            viewer.index = i
+            viewer.resetZoom()
+            viewer.showChrome()
+        }
+
+        onScrubbingChanged: viewer.showChrome()
+    }
+
     // --- Keyboard ---------------------------------------------------------------
 
     Keys.onPressed: (event) => {
@@ -456,6 +500,9 @@ FocusScope {
                 break
             case Qt.Key_0:
                 viewer.resetZoom()
+                break
+            case Qt.Key_T:
+                photosApp.filmstrip = !photosApp.filmstrip
                 break
             default:
                 return

@@ -39,6 +39,21 @@ inline qint64 defaultBudgetKiB(qint64 totalKiB)
     return qBound(512 * MiB, totalKiB / 5, 8 * GiB);
 }
 
+/**
+ * Budget of the full screen preview cache: 1/16 of the physical memory,
+ * between 256 MiB and 2 GiB (a 4K preview is about 32 MiB). Unknown memory
+ * size (0): 256 MiB.
+ */
+inline qint64 previewBudgetKiB(qint64 totalKiB)
+{
+    if (totalKiB <= 0)
+    {
+        return 256 * MiB;
+    }
+
+    return qBound(256 * MiB, totalKiB / 16, 2 * GiB);
+}
+
 /// Memory the system should keep available: max(1 GiB, 10% of RAM).
 inline qint64 lowWaterKiB(qint64 totalKiB)
 {

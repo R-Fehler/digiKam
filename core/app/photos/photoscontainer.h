@@ -34,6 +34,7 @@ class ItemIconView;
 class PhotosLibraryModel;
 class PhotosGridModel;
 class PhotosThumbnailBroker;
+class PhotosPreviewLoader;
 
 class PhotosContainer : public QStackedWidget
 {
@@ -46,6 +47,9 @@ class PhotosContainer : public QStackedWidget
 
     /// Background thumbnail generation progress in percent, or -1 when idle.
     Q_PROPERTY(int          preparingPercent READ preparingPercent NOTIFY signalPreparingChanged)
+
+    /// Full screen viewer: show the strip of thumbnails at the bottom (saved setting).
+    Q_PROPERTY(bool         filmstrip        READ filmstrip        WRITE setFilmstrip NOTIFY signalFilmstripChanged)
 
     /// Two or more fingers on the touch screen: lists stop scrolling, a pinch is going on.
     Q_PROPERTY(bool         multiTouch       READ multiTouch       NOTIFY signalMultiTouchChanged)
@@ -62,6 +66,8 @@ public:
     QVariantList thumbnailSizes()   const;
     int          preparingPercent() const;
     bool         multiTouch()       const;
+    bool         filmstrip()        const;
+    void         setFilmstrip(bool show);
 
     // --- Helpers callable from QML ("photosApp") ---
 
@@ -69,11 +75,18 @@ public:
     Q_INVOKABLE void openContainingFolder(const QString& filePath);
     Q_INVOKABLE void openExternally(const QString& filePath);
 
+    /**
+     * Full screen viewer on photo row: decode the previews (long side size) of
+     * the neighbours ahead, next ones first. row < 0 drops the prefetches.
+     */
+    Q_INVOKABLE void prefetchPreviews(int row, int size);
+
 Q_SIGNALS:
 
     void signalPhotosActiveChanged();
     void signalPreparingChanged();
     void signalMultiTouchChanged();
+    void signalFilmstripChanged();
 
     /// Touch screen pinch (see PhotosTouchPinch): scale relative to the start,
     /// center in scene coordinates.
@@ -102,11 +115,13 @@ private:
     PhotosLibraryModel*    m_library     = nullptr;
     PhotosGridModel*       m_grid        = nullptr;
     PhotosThumbnailBroker* m_broker      = nullptr;
+    PhotosPreviewLoader*   m_previews    = nullptr;
     QAction*               m_toggle      = nullptr;
     QTimer*                m_pregenTimer = nullptr;
     int                    m_pregeneratedCount = -1;
     int                    m_preparingPercent  = -1;
     bool                   m_multiTouch        = false;
+    bool                   m_filmstrip         = true;
     bool                   m_deliveringTouch   = false;
     PhotosTouchPinch       m_touchPinch;
 };

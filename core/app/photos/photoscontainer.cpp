@@ -28,7 +28,9 @@
 
 // KDE includes
 
+#include <kconfiggroup.h>
 #include <klocalizedstring.h>
+#include <ksharedconfig.h>
 #include <ktoolbar.h>
 
 // Local includes
@@ -53,9 +55,13 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
 {
     setObjectName(QLatin1String("PhotosContainer"));
 
-    m_broker  = new PhotosThumbnailBroker(this);
+    m_broker   = new PhotosThumbnailBroker(this);
+    m_previews = new PhotosPreviewLoader(this);
     m_library = new PhotosLibraryModel(this);
     m_grid    = new PhotosGridModel(m_library, this);
+
+    m_filmstrip = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
+                                             .readEntry("Filmstrip", true);
 
     m_quick   = new QQuickWidget(this);
     m_quick->setObjectName(QLatin1String("PhotosQuickWidget"));
@@ -69,7 +75,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     // The engine takes ownership of the providers.
 
     engine->addImageProvider(QLatin1String("dkthumb"),   new PhotosThumbnailProvider(m_broker));
-    engine->addImageProvider(QLatin1String("dkpreview"), new PhotosPreviewProvider());
+    engine->addImageProvider(QLatin1String("dkpreview"), new PhotosPreviewProvider(m_previews));
 
     QQmlContext* const context = m_quick->rootContext();
     context->setContextProperty(QLatin1String("library"),   m_library);
@@ -167,6 +173,27 @@ QVariantList PhotosContainer::thumbnailSizes() const
 int PhotosContainer::preparingPercent() const
 {
     return m_preparingPercent;
+}
+
+bool PhotosContainer::filmstrip() const
+{
+    return m_filmstrip;
+}
+
+void PhotosContainer::setFilmstrip(bool show)
+{
+    if (show == m_filmstrip)
+    {
+        return;
+    }
+
+    m_filmstrip = show;
+
+    KConfigGroup group = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
+    group.writeEntry("Filmstrip", show);
+    group.sync();
+
+    Q_EMIT signalFilmstripChanged();
 }
 
 bool PhotosContainer::multiTouch() const
@@ -293,6 +320,30 @@ bool PhotosContainer::eventFilter(QObject* watched, QEvent* event)
     }
 
     return QStackedWidget::eventFilter(watched, event);
+}
+
+void PhotosContainer::prefetchPreviews(int row, int size)
+{
+    QStringList filePaths;
+
+    if ((row >= 0) && (size > 0))
+    {
+        // More ahead than behind: people mostly go forward.
+
+        const int deltas[] = { +1, -1, +2, +3, -2 };
+
+        for (const int delta : deltas)
+        {
+            const int neighbour = row + delta;
+
+            if ((neighbour >= 0) && (neighbour < m_library->count()) && !m_library->isVideoAt(neighbour))
+            {
+                filePaths << m_library->filePathAt(neighbour);
+            }
+        }
+    }
+
+    m_previews->prefetch(filePaths, size);
 }
 
 void PhotosContainer::slotPregenerate()

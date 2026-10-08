@@ -247,7 +247,11 @@ int main(int argc, char** argv)
     QTemporaryDir dir;
     const QString qmlFile = dir.filePath(QStringLiteral("gesture_test.qml"));
     QFile file(qmlFile);
-    file.open(QIODevice::WriteOnly);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        return 2;
+    }
+
     file.write(qmlSource);
     file.close();
 

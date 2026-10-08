@@ -15,6 +15,7 @@
 // Qt includes
 
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QMetaObject>
 #include <QMutexLocker>
@@ -26,6 +27,8 @@
 #include <QTimer>
 
 // C includes
+
+#include <climits>
 
 #if defined(__GLIBC__)
 #   include <malloc.h>
@@ -819,27 +822,19 @@ class PhotosPreviewResponse : public QQuickImageResponse
 
 public:
 
-    PhotosPreviewResponse(QThreadPool* const pool, const QString& filePath, int size)
+    PhotosPreviewResponse(PhotosPreviewLoader* const loader, const QString& filePath, int size)
+        : m_loader  (loader),
+          m_filePath(filePath),
+          m_size    (size)
     {
-        // The response stays alive until finished() is emitted, which only
-        // happens once the job is done: the job can safely post back to us.
+        // The result comes back through setPreview(), queued to our thread.
 
-        pool->start([this, filePath, size] ()
-            {
-                const DImg dimg   = (size > 0) ? PreviewLoadThread::loadFastButLargeSynchronously(filePath, size)
-                                               : PreviewLoadThread::loadHighQualitySynchronously(filePath);
-                const QImage image = dimg.isNull() ? QImage() : dimg.copyQImage();
+        loader->request(filePath, size, this);
+    }
 
-                QMetaObject::invokeMethod(this, [this, image] ()
-                    {
-                        m_image = image;
-
-                        Q_EMIT finished();
-                    },
-                    Qt::QueuedConnection
-                );
-            }
-        );
+    Q_INVOKABLE void setPreview(const QImage& image)
+    {
+        finish(image);
     }
 
     QQuickTextureFactory* textureFactory() const override
@@ -849,13 +844,77 @@ public:
 
     QString errorString() const override
     {
-        return m_image.isNull() ? QLatin1String("No preview") : QString();
+        return (m_image.isNull() && !m_cancelled) ? QLatin1String("No preview") : QString();
+    }
+
+    void cancel() override
+    {
+        // The viewer moved on: the loader drops the decode if nothing else wants it.
+
+        if (!m_done && m_loader)
+        {
+            m_loader->cancel(m_filePath, m_size, this);
+        }
+
+        m_cancelled = true;
+        finish(QImage());
     }
 
 private:
 
-    QImage m_image;
+    void finish(const QImage& image)
+    {
+        if (m_done)
+        {
+            return;
+        }
+
+        m_done  = true;
+        m_image = image;
+
+        Q_EMIT finished();
+    }
+
+private:
+
+    QPointer<PhotosPreviewLoader> m_loader;
+    QString                       m_filePath;
+    int                           m_size      = 0;
+    QImage                        m_image;
+    bool                          m_done      = false;
+    bool                          m_cancelled = false;
 };
+
+/**
+ * Decodes a preview with a long side of at least size (embedded preview when
+ * large enough, reduced decoding otherwise), scaled down to size when much
+ * larger, in a format Qt Quick uploads as is.
+ */
+QImage decodePreview(const QString& filePath, int size)
+{
+    const DImg dimg = (size > 0) ? PreviewLoadThread::loadFastButLargeSynchronously(filePath, size)
+                                 : PreviewLoadThread::loadHighQualitySynchronously(filePath);
+    QImage image    = dimg.isNull() ? QImage() : dimg.copyQImage();
+
+    if (image.isNull())
+    {
+        return image;
+    }
+
+    if ((size > 0) && (qMax(image.width(), image.height()) > size * 1.2))
+    {
+        image = image.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+
+    if ((image.format() != QImage::Format_RGB32) &&
+        (image.format() != QImage::Format_ARGB32_Premultiplied))
+    {
+        image = image.convertToFormat(image.hasAlphaChannel() ? QImage::Format_ARGB32_Premultiplied
+                                                               : QImage::Format_RGB32);
+    }
+
+    return image;
+}
 
 } // namespace
 
@@ -881,17 +940,9 @@ QQuickImageResponse* PhotosThumbnailProvider::requestImageResponse(const QString
 
 // -------------------------------------------------------------------------------
 
-PhotosPreviewProvider::PhotosPreviewProvider()
+PhotosPreviewProvider::PhotosPreviewProvider(PhotosPreviewLoader* const loader)
+    : m_loader(loader)
 {
-    // Previews are big decodes: a couple of threads keep the next/previous
-    // images loading while not starving the thumbnail loaders.
-
-    m_pool.setMaxThreadCount(2);
-}
-
-PhotosPreviewProvider::~PhotosPreviewProvider()
-{
-    m_pool.waitForDone();
 }
 
 QQuickImageResponse* PhotosPreviewProvider::requestImageResponse(const QString& id, const QSize&)
@@ -900,7 +951,291 @@ QQuickImageResponse* PhotosPreviewProvider::requestImageResponse(const QString& 
     const int size         = id.left(separator).toInt();
     const QString filePath = photosDecodePath(id.mid(separator + 1));
 
-    return new PhotosPreviewResponse(&m_pool, filePath, size);
+    return new PhotosPreviewResponse(m_loader, filePath, size);
+}
+
+// -------------------------------------------------------------------------------
+
+PhotosPreviewLoader::PhotosPreviewLoader(QObject* const parent)
+    : QObject(parent),
+      m_trace(qEnvironmentVariableIsSet("DIGIKAM_PHOTOS_TRACE"))
+{
+    // A few threads: one is kept for the photo on screen, the others decode
+    // the neighbours ahead. More would mostly compete for memory bandwidth.
+
+    bool ok           = false;
+    const int threads = qEnvironmentVariableIntValue("DIGIKAM_PHOTOS_PREVIEW_THREADS", &ok);
+    m_threads         = (ok && (threads > 0)) ? qMax(2, threads)
+                                              : qBound(2, QThread::idealThreadCount() / 2, 4);
+    m_pool.setMaxThreadCount(m_threads);
+
+    qint64 totalKiB     = 0;
+    qint64 availableKiB = 0;
+    memoryState(totalKiB, availableKiB);
+
+    m_budget = PhotosCachePolicy::previewBudgetKiB(totalKiB);
+    m_cache.setMaxCost(m_budget);
+
+    m_memoryTimer = new QTimer(this);
+    m_memoryTimer->setInterval(5000);
+
+    connect(m_memoryTimer, &QTimer::timeout,
+            this, &PhotosPreviewLoader::slotCheckMemory);
+
+    m_memoryTimer->start();
+
+    qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode: preview cache" << (m_budget / 1024) << "MiB,"
+                                 << m_threads << "threads";
+}
+
+PhotosPreviewLoader::~PhotosPreviewLoader()
+{
+    {
+        QMutexLocker locker(&m_mutex);
+        m_jobs.clear();
+    }
+
+    m_pool.waitForDone();
+}
+
+int PhotosPreviewLoader::threadCount() const
+{
+    return m_threads;
+}
+
+QString PhotosPreviewLoader::key(const QString& filePath, int size)
+{
+    return QString::number(size) + QLatin1Char('/') + filePath;
+}
+
+void PhotosPreviewLoader::request(const QString& filePath, int size, QObject* const receiver)
+{
+    QMutexLocker locker(&m_mutex);
+
+    const QString jobKey = key(filePath, size);
+
+    if (const QImage* const cached = m_cache.object(jobKey))
+    {
+        if (m_trace)
+        {
+            qCInfo(DIGIKAM_GENERAL_LOG) << "Photos preview: cache hit" << filePath;
+        }
+
+        QMetaObject::invokeMethod(receiver, "setPreview", Qt::QueuedConnection, Q_ARG(QImage, *cached));
+
+        return;
+    }
+
+    Job& job = m_jobs[jobKey];
+
+    if (job.filePath.isEmpty())
+    {
+        job.filePath = filePath;
+        job.size     = size;
+    }
+
+    if (m_trace)
+    {
+        qCInfo(DIGIKAM_GENERAL_LOG) << "Photos preview: wait for" << filePath
+                                    << (job.running ? "(decoding)" : (job.priority > 0) ? "(prefetch queued)" : "(new)");
+    }
+
+    job.priority = 0;
+    job.receivers << QPointer<QObject>(receiver);
+
+    dispatchLocked();
+}
+
+void PhotosPreviewLoader::cancel(const QString& filePath, int size, QObject* const receiver)
+{
+    QMutexLocker locker(&m_mutex);
+
+    const QString jobKey = key(filePath, size);
+    auto it              = m_jobs.find(jobKey);
+
+    if (it == m_jobs.end())
+    {
+        return;
+    }
+
+    it->receivers.removeAll(QPointer<QObject>(receiver));
+    it->receivers.removeAll(QPointer<QObject>());
+
+    if (it->receivers.isEmpty() && !it->running)
+    {
+        if (m_prefetchKeys.contains(jobKey))
+        {
+            it->priority = qMax(1, it->priority);     // still a neighbour: keep as prefetch
+        }
+        else
+        {
+            m_jobs.erase(it);
+        }
+    }
+}
+
+void PhotosPreviewLoader::prefetch(const QStringList& filePaths, int size)
+{
+    QMutexLocker locker(&m_mutex);
+
+    QSet<QString> keys;
+
+    for (const QString& filePath : filePaths)
+    {
+        keys.insert(key(filePath, size));
+    }
+
+    // Queued prefetches which are no longer neighbours.
+
+    for (auto it = m_jobs.begin() ; it != m_jobs.end() ; )
+    {
+        if (!it->running && it->receivers.isEmpty() && !keys.contains(it.key()))
+        {
+            it = m_jobs.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    m_prefetchKeys = keys;
+
+    for (int i = 0 ; i < filePaths.size() ; ++i)
+    {
+        const QString jobKey = key(filePaths.at(i), size);
+
+        if (m_cache.object(jobKey))         // also marks it as recently used
+        {
+            continue;
+        }
+
+        Job& job = m_jobs[jobKey];
+
+        if (job.filePath.isEmpty())
+        {
+            job.filePath = filePaths.at(i);
+            job.size     = size;
+            job.priority = i + 1;
+        }
+        else if (job.receivers.isEmpty())
+        {
+            job.priority = i + 1;
+        }
+    }
+
+    dispatchLocked();
+}
+
+void PhotosPreviewLoader::dispatchLocked()
+{
+    while (m_running < m_threads)
+    {
+        // Most important queued job. Prefetches leave one thread free for the
+        // photo on screen.
+
+        QString best;
+        int bestPriority = INT_MAX;
+
+        for (auto it = m_jobs.cbegin() ; it != m_jobs.cend() ; ++it)
+        {
+            if (!it->running && (it->priority < bestPriority))
+            {
+                best         = it.key();
+                bestPriority = it->priority;
+            }
+        }
+
+        if (best.isEmpty() || ((bestPriority > 0) && (m_running >= m_threads - 1)))
+        {
+            return;
+        }
+
+        Job& job           = m_jobs[best];
+        job.running        = true;
+        ++m_running;
+
+        const QString filePath = job.filePath;
+        const int size         = job.size;
+        QPointer<PhotosPreviewLoader> guard(this);
+
+        m_pool.start([guard, best, filePath, size] ()
+            {
+                QElapsedTimer timer;
+                timer.start();
+
+                const QImage image    = decodePreview(filePath, size);
+                const qint64 elapsed  = timer.elapsed();
+
+                if (guard)
+                {
+                    QMetaObject::invokeMethod(guard, [guard, best, image, elapsed] ()
+                        {
+                            if (guard)
+                            {
+                                guard->jobDone(best, image, elapsed);
+                            }
+                        },
+                        Qt::QueuedConnection
+                    );
+                }
+            }
+        );
+    }
+}
+
+void PhotosPreviewLoader::jobDone(const QString& jobKey, const QImage& image, qint64 elapsedMs)
+{
+    QMutexLocker locker(&m_mutex);
+
+    --m_running;
+
+    const Job job = m_jobs.take(jobKey);
+
+    if (m_trace)
+    {
+        qCInfo(DIGIKAM_GENERAL_LOG) << "Photos preview: decoded" << job.filePath << image.size()
+                                    << "in" << elapsedMs << "ms"
+                                    << (job.receivers.isEmpty() ? "(prefetch)" : "(on screen)");
+    }
+
+    // Full resolution images (size 0) are too big to keep.
+
+    if (!image.isNull() && (job.size > 0))
+    {
+        m_cache.insert(jobKey, new QImage(image), qMax<qsizetype>(1, image.sizeInBytes() / 1024));
+    }
+
+    for (const QPointer<QObject>& receiver : job.receivers)
+    {
+        if (receiver)
+        {
+            QMetaObject::invokeMethod(receiver, "setPreview", Qt::QueuedConnection, Q_ARG(QImage, image));
+        }
+    }
+
+    dispatchLocked();
+}
+
+void PhotosPreviewLoader::slotCheckMemory()
+{
+    qint64 totalKiB     = 0;
+    qint64 availableKiB = 0;
+    memoryState(totalKiB, availableKiB);
+
+    QMutexLocker locker(&m_mutex);
+
+    const qint64 current = m_cache.maxCost();
+    const qint64 maxCost = PhotosCachePolicy::nextMaxCostKiB(current, m_cache.totalCost(), m_budget,
+                                                             totalKiB, availableKiB);
+
+    if (maxCost != current)
+    {
+        m_cache.setMaxCost(maxCost);        // evicts least recently used previews
+
+        qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode: preview cache budget" << (maxCost / 1024)
+                                     << "MiB, available memory" << (availableKiB / 1024) << "MiB";
+    }
 }
 
 } // namespace Digikam

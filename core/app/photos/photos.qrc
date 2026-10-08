@@ -8,5 +8,6 @@
         <file>qml/Viewer.qml</file>
         <file>qml/IconButton.qml</file>
         <file>qml/AlbumPopup.qml</file>
+        <file>qml/Filmstrip.qml</file>
     </qresource>
 </RCC>

@@ -21,6 +21,9 @@
 #include <QList>
 #include <QMutex>
 #include <QObject>
+#include <QPointer>
+#include <QSet>
+#include <QStringList>
 #include <QQuickAsyncImageProvider>
 #include <QString>
 #include <QThreadPool>
@@ -145,12 +148,84 @@ private:
 
 // -------------------------------------------------------------------------------
 
+/**
+ * Screen sized previews for the full screen viewer, decoded by a small pool
+ * of threads and kept in a memory budgeted cache (see
+ * PhotosCachePolicy::previewBudgetKiB(); it shrinks under memory pressure).
+ *
+ *  - The photo on screen is requested through the "dkpreview" image provider
+ *    and always comes first; one thread is kept for it.
+ *  - The neighbours given to prefetch() (next ones first) are decoded ahead
+ *    with the remaining threads, so going to them shows them instantly.
+ *  - A decode is never done twice: a request for a photo being prefetched
+ *    waits for that job. Prefetches no longer wanted are dropped.
+ *
+ * Thread safe: the image provider calls it from Qt Quick's loader thread.
+ */
+class PhotosPreviewLoader : public QObject
+{
+    Q_OBJECT
+
+public:
+
+    explicit PhotosPreviewLoader(QObject* const parent = nullptr);
+    ~PhotosPreviewLoader() override;
+
+    /**
+     * Asks for the preview of filePath with a long side of at least size
+     * (0: full resolution, not cached). The receiver's Q_INVOKABLE
+     * setPreview(QImage) is called (queued) with the result.
+     */
+    void request(const QString& filePath, int size, QObject* const receiver);
+
+    /// The receiver does not want the result any more.
+    void cancel(const QString& filePath, int size, QObject* const receiver);
+
+    /// Decodes these previews ahead, most important first. Replaces the previous list.
+    void prefetch(const QStringList& filePaths, int size);
+
+    int threadCount() const;
+
+private Q_SLOTS:
+
+    void slotCheckMemory();
+
+private:
+
+    struct Job
+    {
+        QString                  filePath;
+        int                      size     = 0;
+        int                      priority = 0;      ///< 0: on screen, then prefetch order.
+        bool                     running  = false;
+        QList<QPointer<QObject>> receivers;
+    };
+
+    static QString key(const QString& filePath, int size);
+    void           dispatchLocked();
+    void           jobDone(const QString& jobKey, const QImage& image, qint64 elapsedMs);
+
+private:
+
+    mutable QMutex          m_mutex;
+    QHash<QString, Job>     m_jobs;
+    QSet<QString>           m_prefetchKeys;
+    QCache<QString, QImage> m_cache;
+    qint64                  m_budget      = 0;        ///< KiB, before memory pressure.
+    int                     m_running     = 0;
+    int                     m_threads     = 2;
+    bool                    m_trace       = false;
+    QThreadPool             m_pool;
+    QTimer*                 m_memoryTimer = nullptr;
+};
+
+// -------------------------------------------------------------------------------
+
 class PhotosPreviewProvider : public QQuickAsyncImageProvider
 {
 public:
 
-    PhotosPreviewProvider();
-    ~PhotosPreviewProvider() override;
+    explicit PhotosPreviewProvider(PhotosPreviewLoader* const loader);
 
     /**
      * id format: "<size>/<base64url file path>".
@@ -161,7 +236,7 @@ public:
 
 private:
 
-    QThreadPool m_pool;
+    QPointer<PhotosPreviewLoader> m_loader;
 };
 
 } // namespace Digikam
