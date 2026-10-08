@@ -35,7 +35,9 @@
 #  - Qt modules this digiKam needs: qtscxml (StateMachine), qtmultimedia,
 #    qtdeclarative (Qt Quick, for Photos mode);
 #  - libs/boost (Boost Graph, now required) and libs/libheif (HEIC photos);
-#  - ExifTool's test directory is removed from the bundles (fake binaries).
+#  - ExifTool's test directory is removed from the bundles (fake binaries);
+#  - Windows: digiKam's data moved from share/ to bin/data, where it is looked
+#    for; Windows and Linux: Breeze icon resources added.
 
 import os
 
@@ -282,6 +284,17 @@ class Package(CMakePackageBase):
 
         return super().createPackage()
 
+    def _copyIconResources(self, dataDir):
+        # Breeze icon themes as Qt resources, loaded by digiKam from its data
+        # directory (as in the official bundles; Craft's packages provide none).
+
+        for name in ("breeze.rcc", "breeze-dark.rcc"):
+            if not utils.copyFile(self.sourceDir() / "project" / "bundles" / "common" / name, dataDir / name):
+                print(f"Could not copy {name}")
+                return False
+
+        return True
+
     def preArchive(self):
         # Copy More application icons in Windows bundle.
 
@@ -293,6 +306,20 @@ class Package(CMakePackageBase):
         if CraftCore.compiler.isMSVC():
             archiveDir = self.archiveDir()
             binPath = archiveDir / "bin"
+
+            # digiKam installs its data below share/, but on Windows Qt and KDE look
+            # for it in bin/data (QStandardPaths: <APPDIR>/data, Craft's convention).
+            # The bundled MySQL keeps its own files in share/.
+
+            for name in ["digikam", "showfoto", "kxmlgui5", "knotifications6", "solid",
+                         "applications", "metainfo", "icons", "locale"]:
+                if (archiveDir / "share" / name).exists():
+                    if not utils.mergeTree(archiveDir / "share" / name, binPath / "data" / name):
+                        print(f"Could not move share/{name} to bin/data")
+                        return False
+
+            if not self._copyIconResources(binPath / "data" / "digikam"):
+                return False
 
             # Move digiKam plugins from bin/digikam/ to bin/plugins/digikam/
 
@@ -326,6 +353,9 @@ class Package(CMakePackageBase):
 
             archiveDir = self.archiveDir()
             binPath = os.path.join(archiveDir, "bin")
+
+            if not self._copyIconResources(archiveDir / "share" / "digikam"):
+                return False
 
             # Download exiftool in the bundle
 
