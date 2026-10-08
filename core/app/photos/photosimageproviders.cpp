@@ -24,6 +24,10 @@
 #include <QThread>
 #include <QTimer>
 
+// KDE includes
+
+#include <kmemoryinfo.h>
+
 // Local includes
 
 #include "digikam_debug.h"
@@ -126,10 +130,13 @@ PhotosThumbnailBroker::PhotosThumbnailBroker(QObject* const parent)
     connect(m_pregenTimer, &QTimer::timeout,
             this, &PhotosThumbnailBroker::slotPregenerationTick);
 
-    // Cost unit is KiB: keep up to 512 MiB of decoded thumbnails,
-    // e.g. about 700 large (512 px) or 4500 small (192 px) ones.
+    // Memory budget of the decoded-thumbnail cache: 5% of the physical memory,
+    // between 128 MiB and 2 GiB (e.g. 400 MiB with 8 GiB of RAM, holding about
+    // 550 large or 3700 small thumbnails). This is what makes scrolling back
+    // instant: Qt Quick itself only keeps the images of instantiated tiles,
+    // plus 2 MiB of recently released ones.
 
-    m_cache.setMaxCost(512 * 1024);
+    m_cache.setMaxCost(cacheBudgetKiB());
 
     // Scaling a cached large thumbnail down to a smaller size.
 
@@ -143,7 +150,8 @@ PhotosThumbnailBroker::PhotosThumbnailBroker(QObject* const parent)
             Qt::QueuedConnection);
 
     qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode: thumbnail loaders:" << loaders
-                                 << "pre-generators:" << pregens << "sizes:" << m_sizes;
+                                 << "pre-generators:" << pregens << "sizes:" << m_sizes
+                                 << "cache MiB:" << (m_cache.maxCost() / 1024);
 }
 
 PhotosThumbnailBroker::~PhotosThumbnailBroker()
@@ -171,6 +179,28 @@ PhotosThumbnailBroker::~PhotosThumbnailBroker()
     }
 
     m_scalePool.waitForDone();
+}
+
+qint64 PhotosThumbnailBroker::cacheBudgetKiB()
+{
+    bool ok        = false;
+    const int envMiB = qEnvironmentVariableIntValue("DIGIKAM_PHOTOS_CACHE_MB", &ok);
+
+    if (ok && (envMiB > 0))
+    {
+        return qint64(envMiB) * 1024;
+    }
+
+    const KMemoryInfo memory;
+
+    if (memory.isNull() || (memory.totalPhysical() == 0))
+    {
+        return 512 * 1024;
+    }
+
+    const qint64 fivePercentKiB = qint64(memory.totalPhysical() / 1024 / 20);
+
+    return qBound(qint64(128 * 1024), fivePercentKiB, qint64(2 * 1024 * 1024));
 }
 
 QList<int> PhotosThumbnailBroker::sizes() const
@@ -326,9 +356,21 @@ void PhotosThumbnailBroker::store(const QString& filePath, int size, const QImag
         return;
     }
 
+    // Store in a format Qt Quick's texture factory takes as is: it then shares
+    // the pixel data with this cache instead of keeping a converted copy.
+
+    QImage stored = image;
+
+    if ((stored.format() != QImage::Format_RGB32) &&
+        (stored.format() != QImage::Format_ARGB32_Premultiplied))
+    {
+        stored = stored.convertToFormat(stored.hasAlphaChannel() ? QImage::Format_ARGB32_Premultiplied
+                                                                 : QImage::Format_RGB32);
+    }
+
     QMutexLocker locker(&m_mutex);
-    m_cache.insert(cacheKey(filePath, size), new QImage(image),
-                   qMax<qsizetype>(1, image.sizeInBytes() / 1024));
+    m_cache.insert(cacheKey(filePath, size), new QImage(stored),
+                   qMax<qsizetype>(1, stored.sizeInBytes() / 1024));
 }
 
 void PhotosThumbnailBroker::deliver(const QString& filePath, int size, const QImage& image)

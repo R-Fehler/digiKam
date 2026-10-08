@@ -99,6 +99,7 @@ private Q_SLOTS:
 private:
 
     static QString       cacheKey(const QString& filePath, int size);
+    static qint64        cacheBudgetKiB();
     void                 store(const QString& filePath, int size, const QImage& image);
     void                 deliver(const QString& filePath, int size, const QImage& image);
     ThumbnailLoadThread* loaderFor(const QString& filePath) const;

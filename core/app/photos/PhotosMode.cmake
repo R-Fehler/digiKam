@@ -47,6 +47,7 @@ if(Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickWidgets_FOUND)
                           Qt6::Quick
                           Qt6::QuickWidgets
                           KF6::ConfigCore
+                          KF6::CoreAddons
                           KF6::I18n
                           KF6::XmlGui
     )

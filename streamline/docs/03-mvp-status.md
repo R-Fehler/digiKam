@@ -126,6 +126,13 @@ Process memory after scrolling the whole library (2,988 photos) at 26 columns, w
 
 Zooming from 26 to 9 columns (crossing from 192 px to 512 px) showed no placeholder pixels, neither immediately nor after 1.5 s.
 
+### Memory budget and Qt Quick's image cache
+
+- **Our cache scales with RAM.** The decoded-thumbnail cache gets 5% of physical memory, between 128 MiB and 2 GiB (override: `DIGIKAM_PHOTOS_CACHE_MB`). That is about 400 MiB with 8 GiB of RAM, and 804 MiB on the 15.7 GiB test container.
+- **Qt Quick barely caches.** In Qt 6.11 (`qquickpixmapcache.cpp`), an image is kept while an `Image` item uses it. Once released, it goes to an LRU list of only 2 MiB (`cache_limit`), and a 30 s timer drops a quarter of that list each time. A tile that scrolls out of the pre-created rows therefore loses its image almost at once. Scrolling back is served from our cache.
+- **No CPU-side duplication.** Qt Quick's texture factory keeps the image as is when it is `RGB32` or `ARGB32_Premultiplied`, sharing the pixel data with our cache (Qt's implicit sharing); for any other format it would keep a converted copy. The broker now stores thumbnails in one of these two formats.
+- **One extra copy on a real GPU.** There, the texture of each on-screen tile is a second copy in video memory, which cannot be avoided. It is bounded by the number of instantiated tiles and kept small at dense zoom by the size ladder.
+
 ## Bugs found and fixed while testing
 
 - The grid kept a mid-library scroll position while the first collection scan was still adding photos. It now stays at the top when it is at the top.
@@ -146,7 +153,7 @@ These are only indicative: there was no GPU and the CPU was shared with the buil
 
 1. **Sharing and export** of selected photos: copy to a folder, email, and the existing export plugins.
 2. **Touch testing** on a real touch screen (implemented, untested).
-3. **Memory budget.** The decoded-thumbnail cache (up to 512 MB) and Qt Quick's own texture cache partly duplicate each other. The budget could follow available RAM instead.
+3. **Memory pressure.** The cache budget is fixed at start (5% of RAM). It could also shrink when the system runs low on memory.
 4. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
 5. **Import sheet** for phones and cards, with automatic `YYYY/MM` folders.
 6. **People and Places** views using the existing face tags and GPS data.
