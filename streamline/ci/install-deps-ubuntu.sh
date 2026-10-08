@@ -16,15 +16,19 @@ SUDO=""
 
 export DEBIAN_FRONTEND=noninteractive
 
-${SUDO} apt-get update
-${SUDO} apt-get install -y --no-install-recommends ca-certificates curl gnupg
+# Fail and retry instead of hanging on a stalled mirror.
+APT_OPTS=(-o Acquire::Retries=5 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60
+          -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+
+${SUDO} apt-get "${APT_OPTS[@]}" update
+${SUDO} apt-get "${APT_OPTS[@]}" install -y --no-install-recommends ca-certificates curl gnupg
 
 curl -sSfL https://archive.neon.kde.org/public.key | ${SUDO} gpg --batch --yes --dearmor -o /usr/share/keyrings/neon.gpg
 echo "deb [signed-by=/usr/share/keyrings/neon.gpg] https://archive.neon.kde.org/user noble main" |
     ${SUDO} tee /etc/apt/sources.list.d/neon.list > /dev/null
 
-${SUDO} apt-get update
-${SUDO} apt-get install -y --no-install-recommends \
+${SUDO} apt-get "${APT_OPTS[@]}" update
+${SUDO} apt-get "${APT_OPTS[@]}" install -y --no-install-recommends \
     build-essential cmake ninja-build ccache file patchelf desktop-file-utils \
     kf6-extra-cmake-modules qt6-base-dev qt6-base-private-dev qt6-base-dev-tools qt6-declarative-dev \
     qt6-webengine-dev qt6-networkauth-dev qt6-svg-dev qt6-scxml-dev qt6-multimedia-dev \
@@ -51,7 +55,7 @@ WORK="$(mktemp -d)"
 for f in "libexiv2-28_${EXIV2_VERSION}_amd64.deb" \
          "libexiv2-dev_${EXIV2_VERSION}_amd64.deb" \
          "libexiv2-data_${EXIV2_VERSION}_all.deb" ; do
-    curl -sSfL -o "${WORK}/${f}" "https://archive.ubuntu.com/ubuntu/pool/main/e/exiv2/${f}"
+    curl -sSfL --retry 5 --connect-timeout 30 -o "${WORK}/${f}" "https://archive.ubuntu.com/ubuntu/pool/main/e/exiv2/${f}"
 done
 
 ${SUDO} apt-get remove -y libexiv2-dev || true

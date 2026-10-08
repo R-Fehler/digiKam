@@ -73,6 +73,7 @@ jobs:
           df -h /
 
       - name: Install dependencies (KDE neon, Exiv2 0.28)
+        timeout-minutes: 25
         run: sudo streamline/ci/install-deps-ubuntu.sh
 
       - name: Restore compiler cache
