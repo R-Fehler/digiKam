@@ -6,7 +6,7 @@ releases.
 
 | Trigger | Result |
 |---|---|
-| Push to the development branch | Build on all three systems; the rolling pre-release `photos-continuous` is replaced by the new build |
+| Push to the development branch | Build on all three systems (Linux twice: Ubuntu 24.04+, and Ubuntu 22.04+ via Craft); the rolling pre-release `photos-continuous` is replaced by the new build |
 | Push of a tag `photos-v<version>`, or a change of `streamline/release/draft-version` | A **draft** release `digiKam Photos <version>` with the packages of that commit's build (no rebuild) |
 | Any run | Every package is also attached to the run as an artifact |
 
@@ -60,8 +60,26 @@ publish it. The packages keep their build names
 * A smoke test starts the finished AppImage on a virtual X display. The test
   fails if digiKam exits within 60 seconds.
 * Requirement: glibc 2.39, so Ubuntu 24.04, Debian 13, Fedora 40 or newer.
-  Ubuntu 22.04 users need to build from source, or use a Craft-based
-  AppImage (see below).
+
+## Linux, older distributions: Craft AppImage (`-glibc2.34`)
+
+For Ubuntu 22.04 and other older systems, the `linux-compat` job builds a
+second AppImage the way KDE builds the official digiKam AppImage:
+
+* It uses KDE Craft (`streamline/ci/craft-build.py --target linux-64-gcc`)
+  inside an `almalinux:9.8` container, prepared by
+  `streamline/ci/install-deps-alma9.sh`. That script is a copy of KDE's
+  `craft-appimage-alma9` CI image recipe, with GCC toolset 14 and Python
+  3.11.
+* Qt, KDE Frameworks and the other dependencies come prebuilt from KDE's
+  Craft cache. AlmaLinux 9 has glibc 2.34, so the AppImage runs on
+  Ubuntu 22.04, Debian 12, Fedora 36 and newer.
+* The startup script `streamline/ci/craft/AppRun` is KDE's digiKam AppImage
+  script. It starts Photos mode, and `--classic` (or `classic`) starts the
+  stock interface.
+* The `linux-compat-test` job starts this AppImage on a virtual display in a
+  plain `ubuntu:22.04` container, with only the desktop libraries an AppImage
+  expects from the system. Releases include it only when that test passes.
 
 ## Windows and macOS: KDE Craft
 

@@ -33,7 +33,7 @@ if [ -x "${HERE}/usr/libexec/QtWebEngineProcess" ] ; then
     export QTWEBENGINEPROCESS_PATH="${HERE}/usr/libexec/QtWebEngineProcess"
 fi
 
-if [ "${1:-}" = "--classic" ] ; then
+if [ "${1:-}" = "--classic" ] || [ "${1:-}" = "classic" ] ; then
     shift
     exec "${HERE}/usr/bin/digikam" "$@"
 fi

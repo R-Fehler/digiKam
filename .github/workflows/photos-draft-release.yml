@@ -95,6 +95,13 @@ jobs:
         run: |
           mkdir -p dist
           gh run download "${RUN_ID}" --name linux-appimage --dir dist
+          # The Ubuntu 22.04 compatible AppImage, when it passed its test there.
+          compat=$(gh run view "${RUN_ID}" --json jobs --jq '.jobs[] | select(.name == "linux-compat-test") | .conclusion')
+          if [ "${compat}" = "success" ]; then
+            gh run download "${RUN_ID}" --name linux-compat-appimage --dir dist
+          else
+            echo "No tested Ubuntu 22.04 compatible AppImage in run ${RUN_ID} (${compat:-no such job})"
+          fi
           streamline_notes() {
             local version="${TAG#photos-v}"
             has() { ls dist/$1 > /dev/null 2>&1 && echo "yes" || echo "not (yet) in this release"; }
@@ -107,11 +114,12 @@ jobs:
 
           | System | Package | Included |
           |---|---|---|
-          | Linux (x86_64, Ubuntu 24.04 / Debian 13 / Fedora 40 or newer) | \`digiKam-Photos-*.AppImage\` | $(has '*.AppImage') |
+          | Linux (x86_64, Ubuntu 22.04 / Debian 12 / Fedora 36 or newer) | \`digiKam-Photos-*-glibc2.34-x86_64.AppImage\` | $(has '*-glibc2.34-*.AppImage') |
+          | Linux (x86_64, Ubuntu 24.04 / Debian 13 / Fedora 40 or newer) | \`digiKam-Photos-*-x86_64.AppImage\` | $(has '*.AppImage') |
           | Windows 10/11 (x86_64) | \`*.exe\` installer | $(has '*.exe') |
           | macOS 13+ (Apple Silicon) | \`*.dmg\` | $(has '*.dmg') |
 
-          **Linux**: \`chmod +x digiKam-Photos-*.AppImage\` and run it. It starts in Photos mode; \`--classic\` starts the stock interface. Includes ExifTool and the map (OpenStreetMap).
+          **Linux**: \`chmod +x digiKam-Photos-*.AppImage\` and run it. It starts in Photos mode; \`--classic\` starts the stock interface. Includes ExifTool and the map (OpenStreetMap). The \`-glibc2.34\` AppImage is built like the official digiKam AppImage (KDE Craft, AlmaLinux 9) and runs on older distributions such as Ubuntu 22.04; the other one is built on Ubuntu 24.04.
 
           **Windows / macOS**: unsigned builds made with KDE Craft. Windows SmartScreen asks for confirmation; on macOS use right-click → Open the first time. Start with \`--photos\`, or press Ctrl+Shift+P to switch.
 
