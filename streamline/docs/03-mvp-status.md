@@ -222,7 +222,7 @@ All of the new code is in `core/app/photos/`. The changes to stock files are:
 
 | File | Change |
 |---|---|
-| `core/app/main/main.cpp` | `PhotosMode::preInitialize()` (own config file, Photos defaults applied once: folder monitoring and large thumbnails), `--photos` option, skip the model download prompt in Photos mode |
+| `core/app/main/main.cpp` | `PhotosMode::preInitialize()` (own config file, Photos defaults applied once: folder monitoring and large thumbnails), `--photos` option, hand-over of `--photos <path>` to a running Photos mode (`PhotosMode::forwardToRunningInstance()`), skip the model download prompt in Photos mode |
 | `core/app/main/digikamapp_setup.cpp` | wrap the classic view in the Photos container |
 | `core/app/main/digikamapp.cpp` | `PhotosMode::finalizeMainWindow()` |
 | `core/app/main/digikamapp_p.h` | include |
