@@ -148,6 +148,13 @@ Q_SIGNALS:
     /// An import finished (also when canceled after some files).
     void imported(const QString& importId, int count);
 
+    /**
+     * An import without the sheet (inbox) finished: handled are the source
+     * files now in the library (copied, or there already).
+     */
+    void backgroundImported(const QString& inboxId, const QString& device, int count, int failed,
+                            const QString& importId, const QStringList& handled);
+
 public:
 
     /// One file found by scan().
@@ -163,6 +170,7 @@ public:
     struct ScanResult
     {
         QList<Candidate> files;
+        QStringList      duplicates;    ///< same content twice in the source
         QString          source;
         bool             canceled = false;
     };
@@ -173,9 +181,36 @@ public:
         QHash<QString, QString> deviceOfPath;
     };
 
+    /// An import without the sheet, e.g. of an inbox.
+    struct BackgroundJob
+    {
+        QString     inboxId;
+        QString     device;
+        QString     source;         ///< shown in the history
+        QString     root;           ///< library folder receiving the files
+        QStringList files;
+        bool        moveSources = false;
+        QDateTime   started;
+    };
+
+    struct BackgroundResult
+    {
+        QStringList copied;         ///< relative to root
+        QStringList handled;        ///< source files now in the library
+        int         existing = 0;
+        int         failed   = 0;
+    };
+
+    /// Queues an import without the sheet (runs when no other import runs).
+    void importInBackground(const BackgroundJob& job);
+
+    /// An import of this inbox is queued or running.
+    bool backgroundBusy(const QString& inboxId) const;
+
     struct ImportResult
     {
         QStringList      copied;    ///< relative to the import folder
+        QList<QPair<QString, QString> > pairs;     ///< source, copy
         QList<qlonglong> ids;
         int              failed   = 0;
         bool             canceled = false;
@@ -187,6 +222,12 @@ private:
     void slotScanned();
     void slotImported();
     void slotDevicesCounted();
+    void slotBackgroundImported();
+    void startNextBackground();
+
+    QString writeRecord(const QString& root, const QString& device, const QString& source,
+                        const QStringList& copied, int skipped, const QDateTime& startTime,
+                        const QString& inboxId);
 
     QVariantMap readImport(const QString& importId, QString* const filePath = nullptr) const;
     QStringList importedPaths(const QVariantMap& record)                                const;
@@ -208,6 +249,9 @@ private:
     QFutureWatcher<ScanResult>     m_scanWatcher;
     QFutureWatcher<ImportResult>   m_importWatcher;
     QFutureWatcher<DeviceCount>    m_devicesWatcher;
+    QFutureWatcher<BackgroundResult> m_backgroundWatcher;
+    QList<BackgroundJob>           m_queue;
+    BackgroundJob                  m_currentJob;
     QHash<QString, QStringList>    m_deviceFiles;
     QVariantList                   m_devices;
     bool                           m_devicesPending = false;

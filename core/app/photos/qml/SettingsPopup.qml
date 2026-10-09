@@ -16,6 +16,7 @@ Popup {
     padding:          22
 
     signal requestAddFolder()
+    signal requestAddInbox()
     signal requestRemoveFolder(int folderId, string name)
 
     background: Rectangle {
@@ -39,7 +40,19 @@ Popup {
         font.pixelSize:   12
     }
 
-    contentItem: ColumnLayout {
+    // Scrolls when taller than the window.
+    contentItem: Flickable {
+        id: flick
+        implicitHeight: Math.min(column.implicitHeight, (settings.parent ? settings.parent.height : 800) - 80)
+        contentHeight:  column.implicitHeight
+        clip:           true
+        boundsBehavior: Flickable.StopAtBounds
+
+        ScrollBar.vertical: ScrollBar { }
+
+    ColumnLayout {
+        id: column
+        width:   flick.width - 12
         spacing: 6
 
         Text {
@@ -152,6 +165,86 @@ Popup {
                        + "Opening a folder (\u201Cdigikam --photos <folder>\u201D) adds it too.")
         }
 
+        // --- Inboxes ---------------------------------------------------------------------
+
+        Heading {
+            text: qsTr("Inboxes")
+        }
+
+        Repeater {
+            model: inboxes.inboxes
+
+            delegate: ColumnLayout {
+                required property var modelData
+
+                Layout.fillWidth: true
+                spacing:          2
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing:          8
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing:          0
+
+                        Text {
+                            Layout.fillWidth: true
+                            text:             modelData.device + "  \u00B7  " + modelData.status
+                            elide:            Text.ElideRight
+                            color:            palette.windowText
+                            font.pixelSize:   13
+                            font.bold:        true
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text:             modelData.path + "  \u00B7  "
+                                              + ((modelData.mode === "move") ? qsTr("moved into the library")
+                                                                             : qsTr("left in the inbox"))
+                            elide:            Text.ElideMiddle
+                            color:            palette.windowText
+                            opacity:          0.6
+                            font.pixelSize:   11
+                        }
+                    }
+
+                    Button {
+                        visible:   !modelData.found
+                        text:      qsTr("Locate\u2026")
+                        onClicked: {
+                            const folder = inboxes.chooseFolder()
+
+                            if (folder.length > 0)
+                                inboxes.locateInbox(modelData.id, folder)
+                        }
+                    }
+
+                    Button {
+                        visible:   modelData.found && !modelData.thisComputer
+                        text:      qsTr("Import here")
+                        onClicked: inboxes.importOnThisComputer(modelData.id)
+                    }
+
+                    Button {
+                        text:      qsTr("Remove")
+                        onClicked: inboxes.removeInbox(modelData.id)
+                    }
+                }
+            }
+        }
+
+        Button {
+            text:      qsTr("Add an inbox\u2026")
+            onClicked: settings.requestAddInbox()
+        }
+
+        Note {
+            text: qsTr("Folders where phones and other devices drop new photos (Syncthing, PhotoSync, Nextcloud, "
+                       + "Synology Photos\u2026). New photos are imported by themselves once completely written, "
+                       + "with the device name. One computer imports each inbox; the others see it through the sync.")
+        }
+
         // --- Import ----------------------------------------------------------------------
 
         Heading {
@@ -187,5 +280,6 @@ Popup {
             text:             qsTr("Close")
             onClicked:        settings.close()
         }
+    }
     }
 }

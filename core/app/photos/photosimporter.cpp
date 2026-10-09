@@ -143,6 +143,9 @@ QString hashOf(const QString& filePath, int version)
                                             : DImg::getUniqueHash(filePath));
 }
 
+void examineFiles(const QStringList& paths, int hashVersion, PhotosImporter::ScanResult& result,
+                  QAtomicInt* done, QAtomicInt* cancel);
+
 PhotosImporter::ScanResult scanFolder(const QString& folder, int hashVersion,
                                       QAtomicInt* done, QAtomicInt* total, QAtomicInt* cancel)
 {
@@ -181,8 +184,18 @@ PhotosImporter::ScanResult scanFolder(const QString& folder, int hashVersion,
         }
     }
 
-    // 2. Already in the library? Capture date and device of the new ones.
+    examineFiles(paths, hashVersion, result, done, cancel);
 
+    return result;
+}
+
+/**
+ * Already in the library? Capture date and device of the new ones.
+ * Files twice in the list (same content) go to result.duplicates.
+ */
+void examineFiles(const QStringList& paths, int hashVersion, PhotosImporter::ScanResult& result,
+                  QAtomicInt* done, QAtomicInt* cancel)
+{
     QSet<QString> seen;
 
     for (const QString& path : std::as_const(paths))
@@ -191,7 +204,7 @@ PhotosImporter::ScanResult scanFolder(const QString& folder, int hashVersion,
         {
             result.canceled = true;
 
-            return result;
+            return;
         }
 
         const QFileInfo info(path);
@@ -207,6 +220,7 @@ PhotosImporter::ScanResult scanFolder(const QString& folder, int hashVersion,
         {
             // Same file twice in the source (e.g. copies in two folders).
 
+            result.duplicates << path;
             done->fetchAndAddRelaxed(1);
 
             continue;
@@ -256,8 +270,6 @@ PhotosImporter::ScanResult scanFolder(const QString& folder, int hashVersion,
         result.files << candidate;
         done->fetchAndAddRelaxed(1);
     }
-
-    return result;
 }
 
 /// destination path which does not exist yet: "IMG_0001.HEIC", "IMG_0001_1.HEIC"...
@@ -360,7 +372,97 @@ PhotosImporter::ImportResult importFiles(const QList<PhotosImporter::Candidate>&
         }
 
         result.copied << QDir(root).relativeFilePath(dest);
+        result.pairs  << qMakePair(file.path, dest);
         done->fetchAndAddRelaxed(1);
+    }
+
+    return result;
+}
+
+/**
+ * An import without the sheet (inbox): examine, copy what is new, then, when
+ * asked, remove from the source what is safely in the library: verified
+ * copies (same size and digiKam hash) and files already in the library.
+ */
+PhotosImporter::BackgroundResult importBackground(const PhotosImporter::BackgroundJob& job, int hashVersion)
+{
+    PhotosImporter::BackgroundResult result;
+    PhotosImporter::ScanResult scan;
+    QAtomicInt done;
+    QAtomicInt cancel;
+
+    examineFiles(job.files, hashVersion, scan, &done, &cancel);
+
+    QList<PhotosImporter::Candidate> files;
+    QStringList alreadyThere = scan.duplicates;
+
+    for (const PhotosImporter::Candidate& file : std::as_const(scan.files))
+    {
+        if (file.existing)
+        {
+            alreadyThere << file.path;
+            ++result.existing;
+        }
+        else
+        {
+            files << file;
+        }
+    }
+
+    std::sort(files.begin(), files.end(),
+              [] (const PhotosImporter::Candidate& a, const PhotosImporter::Candidate& b)
+        {
+            return (a.date < b.date);
+        }
+    );
+
+    const PhotosImporter::ImportResult imported = importFiles(files, job.root, &done, &cancel);
+
+    result.copied = imported.copied;
+    result.failed = imported.failed;
+    result.handled << alreadyThere;
+
+    for (const QPair<QString, QString>& pair : imported.pairs)
+    {
+        result.handled << pair.first;
+    }
+
+    if (!job.moveSources)
+    {
+        return result;
+    }
+
+    auto removeSource = [] (const QString& path)
+    {
+        const QString sidecar = sourceSidecar(QFileInfo(path));
+
+        if (QFile::remove(path) && !sidecar.isEmpty())
+        {
+            QFile::remove(sidecar);
+        }
+    };
+
+    for (const QPair<QString, QString>& pair : imported.pairs)
+    {
+        const QFileInfo source(pair.first);
+        const QFileInfo copy(pair.second);
+
+        if (
+            (source.size() == copy.size()) &&
+            (hashOf(pair.first, qMax(2, hashVersion)) == hashOf(pair.second, qMax(2, hashVersion)))
+           )
+        {
+            removeSource(pair.first);
+        }
+        else
+        {
+            qCWarning(DIGIKAM_GENERAL_LOG) << "Photos inbox: copy of" << pair.first << "differs, kept in the inbox";
+        }
+    }
+
+    for (const QString& path : std::as_const(alreadyThere))
+    {
+        removeSource(path);
     }
 
     return result;
@@ -425,6 +527,9 @@ PhotosImporter::PhotosImporter(PhotosLibraryModel* const library, QObject* const
     connect(&m_devicesWatcher, &QFutureWatcher<DeviceCount>::finished,
             this, &PhotosImporter::slotDevicesCounted);
 
+    connect(&m_backgroundWatcher, &QFutureWatcher<BackgroundResult>::finished,
+            this, &PhotosImporter::slotBackgroundImported);
+
     QTimer* const timer = new QTimer(this);
     timer->setInterval(100);
     m_progressTimer     = timer;
@@ -452,6 +557,7 @@ PhotosImporter::~PhotosImporter()
     m_scanWatcher.waitForFinished();
     m_importWatcher.waitForFinished();
     m_devicesWatcher.waitForFinished();
+    m_backgroundWatcher.waitForFinished();
 }
 
 QVariantList PhotosImporter::sources() const
@@ -799,34 +905,8 @@ void PhotosImporter::slotImported()
         // History record, with the device: photos nobody touches get no
         // sidecar (see devices()).
 
-        importId = m_startTime.toString(QLatin1String("yyyyMMdd-HHmmss")) + QLatin1Char('-') +
-                   QString::number(QRandomGenerator::global()->bounded(0x10000), 16);
-
-        QJsonObject record;
-        record.insert(QLatin1String("version"),  1);
-        record.insert(QLatin1String("date"),     m_startTime.toOffsetFromUtc(m_startTime.offsetFromUtc())
-                                                            .toString(Qt::ISODate));
-        record.insert(QLatin1String("device"),   m_deviceName);
-        record.insert(QLatin1String("source"),   m_scan.source);
-        record.insert(QLatin1String("computer"), QSysInfo::machineHostName());
-        record.insert(QLatin1String("skipped"),  m_summary.value(QLatin1String("existingCount")).toInt());
-        record.insert(QLatin1String("files"),    QJsonArray::fromStringList(result.copied));
-
-        const QString dir = root + QLatin1Char('/') + QLatin1String(s_historyFolder);
-        QDir().mkpath(dir);
-        hideFolder(dir);
-
-        QSaveFile file(dir + QLatin1Char('/') + importId + QLatin1String(".json"));
-
-        if (file.open(QIODevice::WriteOnly))
-        {
-            file.write(QJsonDocument(record).toJson());
-            file.commit();
-        }
-        else
-        {
-            qCWarning(DIGIKAM_GENERAL_LOG) << "Photos import: cannot write the import record in" << dir;
-        }
+        importId = writeRecord(root, m_deviceName, m_scan.source, result.copied,
+                               m_summary.value(QLatin1String("existingCount")).toInt(), m_startTime, QString());
     }
 
     m_summary.insert(QLatin1String("importedCount"), result.copied.size());
@@ -841,6 +921,115 @@ void PhotosImporter::slotImported()
     {
         Q_EMIT imported(importId, result.copied.size());
     }
+
+    // Inbox imports wait while an import of the user runs.
+
+    startNextBackground();
+}
+
+QString PhotosImporter::writeRecord(const QString& root, const QString& device, const QString& source,
+                                    const QStringList& copied, int skipped, const QDateTime& startTime,
+                                    const QString& inboxId)
+{
+    const QString importId = startTime.toString(QLatin1String("yyyyMMdd-HHmmss")) + QLatin1Char('-') +
+                             QString::number(QRandomGenerator::global()->bounded(0x10000), 16);
+
+    QJsonObject record;
+    record.insert(QLatin1String("version"),  1);
+    record.insert(QLatin1String("date"),     startTime.toOffsetFromUtc(startTime.offsetFromUtc()).toString(Qt::ISODate));
+    record.insert(QLatin1String("device"),   device);
+    record.insert(QLatin1String("source"),   source);
+    record.insert(QLatin1String("computer"), QSysInfo::machineHostName());
+    record.insert(QLatin1String("skipped"),  skipped);
+    record.insert(QLatin1String("files"),    QJsonArray::fromStringList(copied));
+
+    if (!inboxId.isEmpty())
+    {
+        record.insert(QLatin1String("inbox"), inboxId);
+    }
+
+    const QString dir = root + QLatin1Char('/') + QLatin1String(s_historyFolder);
+    QDir().mkpath(dir);
+    hideFolder(dir);
+
+    QSaveFile file(dir + QLatin1Char('/') + importId + QLatin1String(".json"));
+
+    if (file.open(QIODevice::WriteOnly))
+    {
+        file.write(QJsonDocument(record).toJson());
+        file.commit();
+    }
+    else
+    {
+        qCWarning(DIGIKAM_GENERAL_LOG) << "Photos import: cannot write the import record in" << dir;
+    }
+
+    return importId;
+}
+
+// --- Imports without the sheet (inboxes) ------------------------------------------
+
+void PhotosImporter::importInBackground(const BackgroundJob& job)
+{
+    m_queue << job;
+    startNextBackground();
+}
+
+bool PhotosImporter::backgroundBusy(const QString& inboxId) const
+{
+    if (m_backgroundWatcher.isRunning() && (m_currentJob.inboxId == inboxId))
+    {
+        return true;
+    }
+
+    for (const BackgroundJob& job : std::as_const(m_queue))
+    {
+        if (job.inboxId == inboxId)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void PhotosImporter::startNextBackground()
+{
+    if (
+        m_backgroundWatcher.isRunning()                      ||
+        m_queue.isEmpty()                                    ||
+        (m_state == Scanning) || (m_state == Importing)
+       )
+    {
+        return;
+    }
+
+    m_currentJob          = m_queue.takeFirst();
+    m_currentJob.started  = QDateTime::currentDateTime();
+    const int hashVersion = CoreDbAccess().db()->getUniqueHashVersion();
+
+    m_backgroundWatcher.setFuture(QtConcurrent::run(&importBackground, m_currentJob, hashVersion));
+}
+
+void PhotosImporter::slotBackgroundImported()
+{
+    const BackgroundResult result = m_backgroundWatcher.result();
+    QString importId;
+
+    if (!result.copied.isEmpty())
+    {
+        importId = writeRecord(m_currentJob.root, m_currentJob.device, m_currentJob.source, result.copied,
+                               result.existing, m_currentJob.started, m_currentJob.inboxId);
+
+        reloadHistory();
+
+        Q_EMIT imported(importId, result.copied.size());
+    }
+
+    Q_EMIT backgroundImported(m_currentJob.inboxId, m_currentJob.device, result.copied.size(),
+                              result.failed, importId, result.handled);
+
+    startNextBackground();
 }
 
 void PhotosImporter::cancel()
@@ -907,6 +1096,7 @@ void PhotosImporter::reloadHistory()
             entry.insert(QLatin1String("computer"), record.value(QLatin1String("computer")).toString());
             entry.insert(QLatin1String("count"),    record.value(QLatin1String("files")).toArray().size());
             entry.insert(QLatin1String("undone"),   record.contains(QLatin1String("undone")));
+            entry.insert(QLatin1String("inbox"),    record.value(QLatin1String("inbox")).toString());
             history << entry;
 
             const QString device = record.value(QLatin1String("device")).toString();

@@ -53,6 +53,7 @@
 #include "photosmetadata.h"
 #include "photosimporter.h"
 #include "photoslibraries.h"
+#include "photosinboxes.h"
 #include "photosmode.h"
 #include "metaenginesettings.h"
 #include "metaenginesettingscontainer.h"
@@ -108,6 +109,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_grid    = new PhotosGridModel(m_library, this);
     m_importer  = new PhotosImporter(m_library, this);
     m_libraries = new PhotosLibraries(this);
+    m_inboxes   = new PhotosInboxes(m_importer, this);
 
     // Read by the Qt Quick scene as soon as it loads.
 
@@ -136,6 +138,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     context->setContextProperty(QLatin1String("photosApp"), this);
     context->setContextProperty(QLatin1String("importer"),  m_importer);
     context->setContextProperty(QLatin1String("libraries"), m_libraries);
+    context->setContextProperty(QLatin1String("inboxes"),   m_inboxes);
 
     m_quick->setSource(QUrl(QLatin1String("qrc:/photos/qml/Main.qml")));
 

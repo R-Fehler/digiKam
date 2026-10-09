@@ -474,6 +474,24 @@ Rectangle {
         onClosed: (viewer.visible ? viewer : photoGrid).forceActiveFocus()
     }
 
+    // Imports of the inboxes, by themselves.
+    Connections {
+        target: importer
+
+        function onBackgroundImported(inboxId, device, count, failed, importId, handled) {
+            if (count > 0)
+                toast.show((count === 1) ? qsTr("1 new photo from %1").arg(device)
+                                         : qsTr("%L1 new photos from %2").arg(count).arg(device),
+                           qsTr("Show"),
+                           () => root.showImport(importId))
+        }
+    }
+
+    InboxPopup {
+        id: inboxPopup
+        onClosed: photoGrid.forceActiveFocus()
+    }
+
     ImportSheet {
         id: importSheet
         onShowImport: (importId) => root.showImport(importId)
@@ -487,6 +505,11 @@ Rectangle {
         onRequestAddFolder: {
             settingsPopup.close()
             root.requestAddFolder()
+        }
+
+        onRequestAddInbox: {
+            settingsPopup.close()
+            inboxPopup.open()
         }
 
         onRequestRemoveFolder: (folderId, name) => {
@@ -662,8 +685,13 @@ Rectangle {
             NumberAnimation { duration: 180 }
         }
 
-        function show(text) {
-            message = text
+        property string actionText: ""
+        property var    action:     null
+
+        function show(text, actionText, action) {
+            message         = text
+            toast.actionText = actionText || ""
+            toast.action     = action || null
             toastTimer.restart()
         }
 
@@ -685,12 +713,14 @@ Rectangle {
 
             IconButton {
                 anchors.verticalCenter: parent.verticalCenter
-                visible:                library.canUndoTrash
-                text:                   qsTr("Undo")
+                visible:                toast.actionText.length > 0
+                text:                   toast.actionText
                 textColor:              "#8ab4ff"
                 pixelSize:              14
                 onClicked: {
-                    library.undoTrash()
+                    if (toast.action)
+                        toast.action()
+
                     toastTimer.stop()
                 }
             }
@@ -702,7 +732,9 @@ Rectangle {
 
         function onTrashed(count) {
             toast.show((count === 1) ? qsTr("Moved 1 photo to the trash")
-                                     : qsTr("Moved %L1 photos to the trash").arg(count))
+                                     : qsTr("Moved %L1 photos to the trash").arg(count),
+                       library.canUndoTrash ? qsTr("Undo") : "",
+                       () => library.undoTrash())
         }
     }
 }
