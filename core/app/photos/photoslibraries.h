@@ -65,6 +65,29 @@ public:
     /// Number of photos and videos of the library in a folder (recursive).
     Q_INVOKABLE int     photoCount(int id) const;
 
+    /**
+     * Where the library database is, and whether that is a problem:
+     *  - path:      folder of the SQLite files (empty for MariaDB);
+     *  - problem:   "", "library" (inside a library folder), "network"
+     *               (network share) or "synced" (folder of a sync tool);
+     *  - tool:      the sync tool recognized, if any;
+     *  - suggested: a folder on this computer;
+     *  - pending:   a move is asked for at the next start.
+     * Two computers must never open the same SQLite file: through a share
+     * or a sync tool, it gets damaged. Each computer keeps its own database
+     * and reads the shared photos and sidecars.
+     */
+    Q_INVOKABLE QVariantMap databaseCheck() const;
+
+    /// Moves the database to target at the next start (empty: cancel).
+    Q_INVOKABLE void        requestDatabaseMove(const QString& target);
+
+    /// The folder is on a network share (no change notifications: rescanned periodically).
+    static bool isNetworkPath(const QString& path);
+
+    /// The sync tool managing this folder, from its marker files, or empty.
+    static QString syncToolOf(const QString& path);
+
 Q_SIGNALS:
 
     void foldersChanged();

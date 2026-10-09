@@ -29,6 +29,7 @@
 
 #include "digikam_debug.h"
 #include "collectionmanager.h"
+#include "coredb.h"
 #include "coredbaccess.h"
 #include "coredbbackend.h"
 #include "coredbchangesets.h"
@@ -716,6 +717,15 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash()
 
     QueryResult result;
 
+    QStringList videoFilter;
+    CoreDbAccess().db()->getFilterSettings(nullptr, &videoFilter, nullptr);
+    QSet<QString> videoSuffixes;
+
+    for (const QString& suffix : std::as_const(videoFilter))
+    {
+        videoSuffixes.insert(suffix.trimmed().remove(QLatin1String("*.")).toLower());
+    }
+
     const QStringList roots = CollectionManager::instance()->allAvailableAlbumRootPaths();
 
     for (const QString& root : roots)
@@ -741,7 +751,7 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash()
             {
                 sidecars.insert(info.collectionPath, info);
             }
-            else if (info.imageId > 0)
+            else
             {
                 photos << info;
             }
@@ -773,46 +783,18 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash()
 
             items << info;
 
+            // The image id of the record is the one of the computer which
+            // deleted the photo: with a synced library, it means nothing here.
+            // Entries get their own (negative, stable) ids from the trash path.
+
             PhotosEntry entry;
-            entry.id       = info.imageId;
+            entry.id       = -qlonglong(qHash(info.trashPath) & 0x3FFFFFFFFFFFFFFFULL) - 1;
             entry.filePath = info.trashPath;
             entry.dateTime = info.deletionTimestamp;
+            entry.isVideo  = videoSuffixes.contains(original.suffix().toLower());
 
             result.entries << entry;
-            result.trash.insert(info.imageId, items);
-        }
-    }
-
-    if (!result.entries.isEmpty())
-    {
-        QStringList ids;
-
-        for (const PhotosEntry& entry : std::as_const(result.entries))
-        {
-            ids << QString::number(entry.id);
-        }
-
-        QList<QVariant> values;
-
-        {
-            CoreDbAccess access;
-            access.backend()->execSql(QString::fromLatin1("SELECT id, category FROM Images WHERE id IN (%1);")
-                                          .arg(ids.join(QLatin1Char(','))), &values);
-        }
-
-        QSet<qlonglong> videos;
-
-        for (int i = 0 ; (i + 1) < values.size() ; i += 2)
-        {
-            if (values.at(i + 1).toInt() == DatabaseItem::Video)
-            {
-                videos.insert(values.at(i).toLongLong());
-            }
-        }
-
-        for (PhotosEntry& entry : result.entries)
-        {
-            entry.isVideo = videos.contains(entry.id);
+            result.trash.insert(entry.id, items);
         }
     }
 
@@ -1070,7 +1052,11 @@ QVariantMap PhotosLibraryModel::infoAt(int row) const
     const QFileInfo file(entry.filePath);
 
     map.insert(QLatin1String("dateText"), dateTextAt(row));
-    map.insert(QLatin1String("fileName"), (m_filter == Trash) ? info.name() : file.fileName());
+    const DTrashItemInfoList trashed = m_trashInfos.value(entry.id);    // sidecars, then the photo
+
+    map.insert(QLatin1String("fileName"), ((m_filter == Trash) && !trashed.isEmpty())
+                                          ? QFileInfo(trashed.constLast().collectionPath).fileName()
+                                          : file.fileName());
     map.insert(QLatin1String("folder"),   (m_filter == Trash) ? QString() : QDir::toNativeSeparators(file.path()));
     map.insert(QLatin1String("size"),     locale.formattedDataSize(file.size(), 1, QLocale::DataSizeTraditionalFormat));
     map.insert(QLatin1String("caption"),  info.comment());
@@ -2016,6 +2002,36 @@ void PhotosLibraryModel::trashActionIds(const QList<qlonglong>& ids, bool restor
     if (items.isEmpty())
     {
         return;
+    }
+
+    // "Delete permanently" also removes the database entry of the record's
+    // image id: only when it is this photo's entry in this computer's
+    // database (deleted here). Records synced from another computer carry
+    // ids of its database, which may be any photo here.
+
+    for (DTrashItemInfo& item : items)
+    {
+        if (item.imageId <= 0)
+        {
+            continue;
+        }
+
+        QList<QVariant> values;
+
+        {
+            CoreDbAccess access;
+            access.backend()->execSql(QLatin1String("SELECT name, status FROM Images WHERE id = ?;"),
+                                      item.imageId, &values);
+        }
+
+        const bool same = (values.size() >= 2) &&
+                          (values.at(0).toString() == QFileInfo(item.collectionPath).fileName()) &&
+                          (values.at(1).toInt() != DatabaseItem::Visible);
+
+        if (!same)
+        {
+            item.imageId = -1;
+        }
     }
 
     if (restore)

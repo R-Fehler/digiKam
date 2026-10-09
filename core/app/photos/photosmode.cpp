@@ -136,7 +136,136 @@ void PhotosMode::preInitialize(int argc, char** argv)
         }
     }
 
+    // A database move asked for in the last session (see PhotosLibraries::
+    // databaseCheck()): now, before the database is opened.
+
+    if (QFile::exists(ownConfig))
+    {
+        moveDatabaseIfRequested(ownConfig, dkConfig);
+    }
+
     KConfig::setMainConfigName(configFileName());
+}
+
+void PhotosMode::moveDatabaseIfRequested(const QString& ownConfig, const QString& classicConfig)
+{
+    KConfig config(ownConfig, KConfig::SimpleConfig);
+    KConfigGroup photos   = config.group(QLatin1String("Photos Mode"));
+    const QString target  = photos.readEntry(QLatin1String("Move Database To"), QString());
+
+    if (target.isEmpty())
+    {
+        return;
+    }
+
+    photos.deleteEntry(QLatin1String("Move Database To"));
+    config.sync();
+
+    KConfigGroup database = config.group(QLatin1String("Database Settings"));
+
+    if (database.readEntry(QLatin1String("Database Type"), QString()) != QLatin1String("QSQLITE"))
+    {
+        return;
+    }
+
+    const char* const keys[] =
+    {
+        "Database Name",
+        "Database Name Thumbnails",
+        "Database Name Face",
+        "Database Name Similarity"
+    };
+
+    const char* const files[] =
+    {
+        "digikam4.db",
+        "thumbnails-digikam.db",
+        "recognition.db",
+        "similarity.db"
+    };
+
+    QDir().mkpath(target);
+    const QString targetDir = QDir(target).absolutePath() + QLatin1Char('/');
+    bool ok                 = true;
+    QStringList moved;
+
+    for (int i = 0 ; ok && (i < 4) ; ++i)
+    {
+        const QString sourceDir = database.readEntry(keys[i], QString());
+
+        if (sourceDir.isEmpty() || (QDir(sourceDir).absolutePath() == QDir(targetDir).absolutePath()))
+        {
+            continue;
+        }
+
+        // With the journal files of SQLite, if any.
+
+        for (const QString& suffix : { QString(), QStringLiteral("-wal"), QStringLiteral("-shm"), QStringLiteral("-journal") })
+        {
+            const QString from = QDir(sourceDir).filePath(QLatin1String(files[i]) + suffix);
+            const QString to   = targetDir + QLatin1String(files[i]) + suffix;
+
+            if (!QFile::exists(from))
+            {
+                continue;
+            }
+
+            if (QFile::exists(to))
+            {
+                QFile::rename(to, to + QLatin1String(".old"));
+            }
+
+            // Rename on the same drive, else copy then remove.
+
+            if (QFile::rename(from, to) || (QFile::copy(from, to) && QFile::remove(from)))
+            {
+                moved << to;
+            }
+            else
+            {
+                qCWarning(DIGIKAM_GENERAL_LOG) << "Photos mode: cannot move the database file" << from << "to" << to;
+                ok = false;
+                break;
+            }
+        }
+    }
+
+    if (!ok)
+    {
+        return;
+    }
+
+    // Point this configuration, and the classic one when it used the same
+    // database, to the new place: both front-ends keep sharing it.
+
+    const QString oldDir = database.readEntry(keys[0], QString());
+
+    auto repoint = [&] (KConfig& cfg)
+    {
+        KConfigGroup group = cfg.group(QLatin1String("Database Settings"));
+
+        if (QDir(group.readEntry(keys[0], QString())).absolutePath() != QDir(oldDir).absolutePath())
+        {
+            return;
+        }
+
+        for (const char* const key : keys)
+        {
+            group.writeEntry(key, targetDir);
+        }
+
+        cfg.sync();
+    };
+
+    repoint(config);
+
+    if (QFile::exists(classicConfig))
+    {
+        KConfig classic(classicConfig, KConfig::SimpleConfig);
+        repoint(classic);
+    }
+
+    qCDebug(DIGIKAM_GENERAL_LOG) << "Photos mode: library database moved to" << targetDir << moved;
 }
 
 bool PhotosMode::isEnabled()

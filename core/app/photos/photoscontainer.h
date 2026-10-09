@@ -91,6 +91,9 @@ public:
     // --- Helpers callable from QML ("photosApp") ---
 
     Q_INVOKABLE void switchToClassic();
+
+    /// Closes the application (e.g. to apply a database move).
+    Q_INVOKABLE void quitApplication();
     Q_INVOKABLE void openContainingFolder(const QString& filePath);
     Q_INVOKABLE void openExternally(const QString& filePath);
 

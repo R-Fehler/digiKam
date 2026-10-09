@@ -406,6 +406,11 @@ Rectangle {
                 color:                  root.separatorColor
             }
 
+            // The library database must stay on this computer (see PhotosLibraries::databaseCheck()).
+            DatabaseBanner {
+                Layout.fillWidth: true
+            }
+
             PhotoGrid {
                 id: photoGrid
                 Layout.fillWidth:  true

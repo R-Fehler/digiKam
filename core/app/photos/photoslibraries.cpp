@@ -20,9 +20,18 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QStandardPaths>
-#include <QUrl>
+#include <QStorageInfo>
+#include <QSysInfo>
 
 // KDE includes
+
+#include <kconfiggroup.h>
+#include <ksharedconfig.h>
+
+#ifdef Q_OS_WIN
+#   include <windows.h>
+#endif
+#include <QUrl>
 
 #include <klocalizedstring.h>
 
@@ -100,7 +109,9 @@ QVariantList PhotosLibraries::folders() const
                                                                               : QFileInfo(path).fileName());
         folder.insert(QLatin1String("available"), location.isAvailable());
         folder.insert(QLatin1String("removable"), location.type() == CollectionLocation::VolumeRemovable);
-        folder.insert(QLatin1String("network"),   location.type() == CollectionLocation::Network);
+        folder.insert(QLatin1String("network"),   (location.type() == CollectionLocation::Network) ||
+                                                  (location.isAvailable() && isNetworkPath(path)));
+        folder.insert(QLatin1String("syncTool"),  location.isAvailable() ? syncToolOf(path) : QString());
         folders << folder;
     }
 
@@ -236,6 +247,154 @@ int PhotosLibraries::photoCount(int id) const
     }
 
     return values.isEmpty() ? 0 : values.constFirst().toInt();
+}
+
+bool PhotosLibraries::isNetworkPath(const QString& path)
+{
+    if (path.startsWith(QLatin1String("//")) || path.startsWith(QLatin1String("\\\\")))
+    {
+        return true;    // UNC path
+    }
+
+#ifdef Q_OS_WIN
+
+    const QString root        = QStorageInfo(path).rootPath();
+    const std::wstring native = QDir::toNativeSeparators(root).toStdWString();
+
+    if (!root.isEmpty() && (GetDriveTypeW(native.c_str()) == DRIVE_REMOTE))
+    {
+        return true;
+    }
+
+#endif
+
+    static const QStringList networkTypes =
+    {
+        QLatin1String("cifs"),     QLatin1String("smb3"),       QLatin1String("smbfs"),
+        QLatin1String("nfs"),      QLatin1String("nfs4"),       QLatin1String("afpfs"),
+        QLatin1String("webdav"),   QLatin1String("davfs"),      QLatin1String("fuse.sshfs"),
+        QLatin1String("sshfs"),    QLatin1String("fuse.rclone"), QLatin1String("fuse.gvfsd-fuse"),
+        QLatin1String("9p"),       QLatin1String("ceph"),       QLatin1String("glusterfs")
+    };
+
+    return networkTypes.contains(QString::fromLatin1(QStorageInfo(path).fileSystemType()).toLower());
+}
+
+QString PhotosLibraries::syncToolOf(const QString& path)
+{
+    // Marker files of the sync tools, in the folder or a parent folder.
+
+    QDir dir(path);
+
+    for (int depth = 0 ; depth < 32 ; ++depth)
+    {
+        if      (dir.exists(QLatin1String(".stfolder")))
+        {
+            return QLatin1String("Syncthing");
+        }
+        else if (dir.exists(QLatin1String(".dropbox")) || dir.exists(QLatin1String(".dropbox.cache")))
+        {
+            return QLatin1String("Dropbox");
+        }
+        else if (!dir.entryList(QStringList() << QLatin1String(".sync_*.db") << QLatin1String("._sync_*.db")
+                                              << QLatin1String(".owncloudsync.log") << QLatin1String(".nextcloudsync.log"),
+                                QDir::Files | QDir::Hidden).isEmpty())
+        {
+            return QLatin1String("Nextcloud");
+        }
+        else if (dir.exists(QLatin1String(".sync")) && dir.exists(QLatin1String(".sync/ID")))
+        {
+            return QLatin1String("Resilio Sync");
+        }
+
+        const QString name = dir.dirName();
+
+        if ((name == QLatin1String("My Drive")) || name.startsWith(QLatin1String("Google Drive")))
+        {
+            return QLatin1String("Google Drive");
+        }
+
+        if (name.startsWith(QLatin1String("OneDrive")))
+        {
+            return QLatin1String("OneDrive");
+        }
+
+        if ((name == QLatin1String("iCloud Drive")) || (name == QLatin1String("com~apple~CloudDocs")))
+        {
+            return QLatin1String("iCloud Drive");
+        }
+
+        if (!dir.cdUp())
+        {
+            break;
+        }
+    }
+
+    return QString();
+}
+
+QVariantMap PhotosLibraries::databaseCheck() const
+{
+    QVariantMap result;
+
+    const KConfigGroup database = KSharedConfig::openConfig()->group(QLatin1String("Database Settings"));
+    const KConfigGroup photos   = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
+
+    result.insert(QLatin1String("pending"), photos.readEntry(QLatin1String("Move Database To"), QString()));
+
+    if (database.readEntry(QLatin1String("Database Type"), QString()) != QLatin1String("QSQLITE"))
+    {
+        return result;      // A database server (MariaDB): made for several clients.
+    }
+
+    const QString path = cleanPath(database.readEntry(QLatin1String("Database Name"), QString()));
+    result.insert(QLatin1String("path"),      QDir::toNativeSeparators(path));
+    result.insert(QLatin1String("suggested"), QDir::toNativeSeparators(
+                  QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QLatin1String("/database")));
+
+    QString problem;
+
+    for (const QString& root : CollectionManager::instance()->allAvailableAlbumRootPaths())
+    {
+        if (isInside(path, cleanPath(root)))
+        {
+            problem = QLatin1String("library");
+            break;
+        }
+    }
+
+    const QString tool = syncToolOf(path);
+
+    if (problem.isEmpty() && isNetworkPath(path))
+    {
+        problem = QLatin1String("network");
+    }
+
+    if (problem.isEmpty() && !tool.isEmpty())
+    {
+        problem = QLatin1String("synced");
+    }
+
+    result.insert(QLatin1String("problem"), problem);
+    result.insert(QLatin1String("tool"),    tool);
+
+    return result;
+}
+
+void PhotosLibraries::requestDatabaseMove(const QString& target)
+{
+    KConfigGroup photos = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
+
+    if (target.isEmpty())
+    {
+        photos.deleteEntry(QLatin1String("Move Database To"));
+    }
+    else
+    {
+        photos.writeEntry(QLatin1String("Move Database To"), QDir::fromNativeSeparators(target));
+    }
+
+    photos.sync();
 }
 
 } // namespace Digikam

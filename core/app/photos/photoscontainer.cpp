@@ -592,6 +592,14 @@ void PhotosContainer::slotToggle()
     setPhotosActive(!photosActive());
 }
 
+void PhotosContainer::quitApplication()
+{
+    if (m_app)
+    {
+        m_app->close();
+    }
+}
+
 void PhotosContainer::switchToClassic()
 {
     setPhotosActive(false);

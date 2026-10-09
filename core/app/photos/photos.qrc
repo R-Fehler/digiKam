@@ -14,5 +14,6 @@
         <file>qml/SettingsPopup.qml</file>
         <file>qml/InfoPanel.qml</file>
         <file>qml/VideoPlayer.qml</file>
+        <file>qml/DatabaseBanner.qml</file>
     </qresource>
 </RCC>

@@ -81,6 +81,10 @@ public:
 
 private:
 
+    /// Moves the SQLite database files where the last session asked
+    /// ("Photos Mode" / "Move Database To"), before they are opened.
+    static void moveDatabaseIfRequested(const QString& ownConfig, const QString& classicConfig);
+
     PhotosMode()  = delete;
     ~PhotosMode() = delete;
 };
