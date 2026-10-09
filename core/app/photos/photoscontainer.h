@@ -130,6 +130,9 @@ Q_SIGNALS:
     void touchPinchUpdated(qreal scale, qreal x, qreal y);
     void touchPinchFinished();
 
+    /// Sync conflict copies of sidecars merged (see PhotosSyncHealth).
+    void conflictsMerged(int count);
+
     /// A folder or photo to show: PhotosLibraries::checkPath() of it.
     void openRequested(const QVariantMap& target);
 

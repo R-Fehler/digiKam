@@ -474,6 +474,15 @@ Rectangle {
         onClosed: (viewer.visible ? viewer : photoGrid).forceActiveFocus()
     }
 
+    Connections {
+        target: photosApp
+
+        function onConflictsMerged(count) {
+            toast.show((count === 1) ? qsTr("Merged the changes of another computer into 1 photo (sync conflict)")
+                                     : qsTr("Merged the changes of other computers into %L1 photos (sync conflicts)").arg(count))
+        }
+    }
+
     // Imports of the inboxes, by themselves.
     Connections {
         target: importer

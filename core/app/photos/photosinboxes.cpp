@@ -47,6 +47,7 @@
 #include "coredb.h"
 #include "coredbaccess.h"
 #include "photosimporter.h"
+#include "photossyncnames.h"
 #include "scancontroller.h"
 
 namespace Digikam
@@ -160,39 +161,7 @@ PhotosInboxes::Listing listInboxes(const QList<PhotosInboxes::Definition>& defin
 
 bool PhotosInboxes::isTemporaryName(const QString& relativePath)
 {
-    const QStringList parts = relativePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
-
-    for (const QString& part : parts)
-    {
-        // Hidden files and folders: .stversions, .thumbnails, .trashed-*,
-        // ._resource forks, Syncthing's .syncthing.NAME.tmp...
-
-        if (part.startsWith(QLatin1Char('.')) || part.startsWith(QLatin1Char('~')))
-        {
-            return true;
-        }
-    }
-
-    const QString name = parts.isEmpty() ? relativePath : parts.constLast();
-
-    static const char* const suffixes[] =
-    {
-        ".tmp", ".temp", ".part", ".partial", ".crdownload", ".download", ".!sync", ".filepart"
-    };
-
-    for (const char* const suffix : suffixes)
-    {
-        if (name.endsWith(QLatin1String(suffix), Qt::CaseInsensitive))
-        {
-            return true;
-        }
-    }
-
-    return (
-            name.contains(QLatin1String(".syncthing."), Qt::CaseInsensitive) ||
-            name.contains(QLatin1String("sync-conflict"), Qt::CaseInsensitive) ||
-            name.contains(QLatin1String("conflicted copy"), Qt::CaseInsensitive)
-           );
+    return photosIsTemporaryName(relativePath);
 }
 
 PhotosInboxes::PhotosInboxes(PhotosImporter* const importer, QObject* const parent)

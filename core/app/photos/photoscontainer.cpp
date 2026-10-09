@@ -54,6 +54,7 @@
 #include "photosimporter.h"
 #include "photoslibraries.h"
 #include "photosinboxes.h"
+#include "photossynchealth.h"
 #include "photosmode.h"
 #include "metaenginesettings.h"
 #include "metaenginesettingscontainer.h"
@@ -110,6 +111,13 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_importer  = new PhotosImporter(m_library, this);
     m_libraries = new PhotosLibraries(this);
     m_inboxes   = new PhotosInboxes(m_importer, this);
+
+    // Shared or synced libraries: rescans, sidecar sync conflicts.
+
+    PhotosSyncHealth* const syncHealth = new PhotosSyncHealth(this);
+
+    connect(syncHealth, &PhotosSyncHealth::conflictsMerged,
+            this, &PhotosContainer::conflictsMerged);
 
     // Read by the Qt Quick scene as soon as it loads.
 
