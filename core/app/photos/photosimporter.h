@@ -214,6 +214,16 @@ public:
         int         failed   = 0;
     };
 
+    /// The device a file was imported from (see devices()), or empty.
+    QString deviceOfFile(const QString& filePath) const;
+
+    /**
+     * Files moved to another library folder (see PhotosMover) keep their
+     * device: a record in that folder, not listed as an import.
+     * relativeFiles: by device, paths relative to root.
+     */
+    void recordMoved(const QString& root, const QHash<QString, QStringList>& relativeFiles);
+
     /// Queues an import without the sheet (runs when no other import runs).
     void importInBackground(const BackgroundJob& job);
 
@@ -276,6 +286,8 @@ private:
     QList<BackgroundJob>           m_queue;
     BackgroundJob                  m_currentJob;
     QHash<QString, QStringList>    m_deviceFiles;
+    QHash<QString, QString>        m_deviceOfPath;
+    QStringList                    m_shownDeviceFiles;
     QHash<QString, QVariantMap>    m_safety;           ///< by device: last check
     QHash<QString, QString>        m_deviceOfSource;   ///< source folder -> device of its last import
     QVariantList                   m_devices;

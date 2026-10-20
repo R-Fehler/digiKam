@@ -204,6 +204,58 @@ Rectangle {
             }
         }
 
+        // Personal and shared libraries (see PhotosLibraries::scope).
+        Rectangle {
+            id: scopeSwitch
+
+            visible:             libraries.hasBothKinds
+            Layout.fillWidth:    true
+            Layout.bottomMargin: 8
+            implicitHeight:      28
+            radius:              8
+            color:               Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.07)
+
+            RowLayout {
+                anchors.fill:    parent
+                anchors.margins: 2
+                spacing:         2
+
+                Repeater {
+                    model: [qsTr("Both"), qsTr("Personal"), qsTr("Shared")]
+
+                    delegate: Rectangle {
+                        required property int    index
+                        required property string modelData
+                        readonly property bool   current: libraries.scope === index
+
+                        Layout.fillWidth:  true
+                        Layout.fillHeight: true
+                        radius:            6
+                        color:             current ? palette.base : "transparent"
+                        border.width:      current ? 1 : 0
+                        border.color:      Qt.rgba(palette.windowText.r, palette.windowText.g, palette.windowText.b, 0.12)
+
+                        Text {
+                            anchors.centerIn: parent
+                            text:             modelData
+                            color:            palette.windowText
+                            font.pixelSize:   12
+                            font.bold:        current
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape:  Qt.PointingHandCursor
+                            onClicked:    libraries.scope = index
+                        }
+
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: modelData
+                    }
+                }
+            }
+        }
+
         Flickable {
             id: flick
             Layout.fillWidth:  true
@@ -293,9 +345,9 @@ Rectangle {
                         delegate: NavItem {
                             required property var modelData
 
-                            glyph:       modelData.network ? "\u2601" : (modelData.removable ? "\u23CF" : "\u25A4")
+                            glyph:       modelData.shared ? "\u2601" : (modelData.removable ? "\u23CF" : "\u25A4")
                             label:       modelData.name
-                            detail:      modelData.available ? "" : qsTr("not connected")
+                            detail:      modelData.available ? (modelData.shared ? qsTr("shared") : "") : qsTr("not connected")
                             opacity:     modelData.available ? 1.0 : 0.5
                             selected:    (sidebar.page === "grid") && (library.filter === 13) &&
                                          (library.folderPath === modelData.path)

@@ -48,6 +48,7 @@ struct PhotosEntry
     int       rating   = 0;
     bool      isVideo  = false;
     QString   livePath;     ///< Video of a Live Photo (same name, same folder).
+    int       rootId   = 0; ///< Library folder (collection).
 };
 
 class PhotosLibraryModel : public QAbstractListModel
@@ -185,6 +186,13 @@ public:
     /// Device of imported files (from the import records, see PhotosImporter).
     void                  setImportDevices(const QHash<QString, QString>& deviceOfPath);
 
+    /**
+     * Personal and shared libraries (see PhotosLibraries): the library
+     * folders shown (empty: all), and the shared ones. Folder views show
+     * their folder whatever the scope.
+     */
+    void                  setScope(const QSet<int>& rootIds, const QSet<int>& sharedRootIds);
+
     /// Called when a thumbnail file changed on disk: makes tiles request it again.
     void                  invalidateThumbnail(const QString& filePath);
 
@@ -199,6 +207,9 @@ public:
     Q_INVOKABLE void       beginBandSelection(bool additive);
     Q_INVOKABLE void       updateBandSelection(const QList<int>& rows);
     Q_INVOKABLE QList<int> selectedRows()                       const;
+
+    /// Library of the selected photos: 0 none, 1 personal, 2 shared, 3 both.
+    Q_INVOKABLE int        selectionLibraryKind()               const;
 
     // --- Actions on the selection ---
 
@@ -272,6 +283,7 @@ public:
         QString       model;
         QSet<QString> files;
         QString       folder;
+        QSet<int>     roots;        ///< empty: all
     };
 
     struct QueryResult
@@ -283,7 +295,7 @@ public:
 private:
 
     static QueryResult queryEntries(const Query& query);
-    static QueryResult queryTrash();
+    static QueryResult queryTrash(const QSet<int>& roots);
     void setView(int filter, int tagId);
     void setHiddenIds(const QList<qlonglong>& ids, bool hidden);
     void trashActionIds(const QList<qlonglong>& ids, bool restore);
@@ -309,6 +321,8 @@ private:
     QString                              m_filesKey;
     QString                              m_folder;
     QHash<QString, QString>              m_importDevices;
+    QSet<int>                            m_scopeRoots;
+    QSet<int>                            m_sharedRoots;
     QTimer*                              m_reloadTimer = nullptr;
     QTimer*                              m_albumsTimer = nullptr;
     QVariantList                         m_albums;

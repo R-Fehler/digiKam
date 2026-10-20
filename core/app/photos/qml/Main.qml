@@ -256,6 +256,14 @@ Rectangle {
                                        ? qsTr("Loading…")
                                        : ((library.count === 1) ? qsTr("1 item") : qsTr("%L1 items").arg(library.count))
 
+                            if (libraries.scope === 1 && library.filter !== 13)
+                                line += qsTr(" \u00B7 Personal library")
+                            else if (libraries.scope === 2 && library.filter !== 13)
+                                line += qsTr(" \u00B7 Shared library")
+
+                            if (mover.busy)
+                                line += qsTr(" \u00B7 moving\u2026")
+
                             if (library.filter === 13)
                                 line += " \u00B7 " + library.folderPath
                             else if (library.filter === 12)
@@ -353,6 +361,18 @@ Rectangle {
                         text:      qsTr("Remove from album")
                         pixelSize: 13
                         onClicked: library.removeSelectionFromCurrentAlbum()
+                    }
+
+                    // Personal and shared libraries: to the other one.
+                    IconButton {
+                        readonly property int kind: (library.selectionRevision >= 0) && libraries.hasBothKinds
+                                                    ? library.selectionLibraryKind() : 0
+                        visible:   root.selecting && !root.trashView && (kind > 0) && !mover.busy
+                        text:      (kind === 2) ? qsTr("Move to Personal") : qsTr("Move to Shared")
+                        pixelSize: 13
+                        tooltip:   (kind === 2) ? qsTr("Move to your library on this computer only")
+                                                : qsTr("Move to the library you share")
+                        onClicked: mover.moveSelection(kind !== 2)
                     }
 
                     IconButton {
@@ -521,6 +541,28 @@ Rectangle {
         function onConflictsMerged(count) {
             toast.show((count === 1) ? qsTr("Merged the changes of another computer into 1 photo (sync conflict)")
                                      : qsTr("Merged the changes of other computers into %L1 photos (sync conflicts)").arg(count))
+        }
+    }
+
+    // Personal and shared libraries.
+    Connections {
+        target: mover
+
+        function onMoved(count, failed, toShared) {
+            let text = toShared
+                       ? ((count === 1) ? qsTr("Moved 1 item to the Shared library")
+                                        : qsTr("Moved %L1 items to the Shared library").arg(count))
+                       : ((count === 1) ? qsTr("Moved 1 item to your Personal library")
+                                        : qsTr("Moved %L1 items to your Personal library").arg(count))
+
+            if (failed > 0)
+                text += qsTr(" \u00B7 %L1 could not be moved").arg(failed)
+
+            toast.show(text)
+        }
+
+        function onFailed(message) {
+            toast.show(message)
         }
     }
 

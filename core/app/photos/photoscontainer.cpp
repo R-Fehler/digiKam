@@ -55,6 +55,7 @@
 #include "photoslibraries.h"
 #include "photosinboxes.h"
 #include "photossynchealth.h"
+#include "photosmover.h"
 #include "photosmode.h"
 #include "metaenginesettings.h"
 #include "metaenginesettingscontainer.h"
@@ -111,6 +112,19 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     m_importer  = new PhotosImporter(m_library, this);
     m_libraries = new PhotosLibraries(this);
     m_inboxes   = new PhotosInboxes(m_importer, this);
+    m_mover     = new PhotosMover(m_library, m_libraries, m_importer, this);
+
+    // Personal and shared libraries: what the views show.
+
+    auto applyScope = [this] ()
+    {
+        m_library->setScope(m_libraries->scopeRootIds(), m_libraries->sharedRootIds());
+    };
+
+    connect(m_libraries, &PhotosLibraries::scopeChanged,
+            this, applyScope);
+
+    applyScope();
 
     // Shared or synced libraries: rescans, sidecar sync conflicts.
 
@@ -149,6 +163,7 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
     context->setContextProperty(QLatin1String("importer"),  m_importer);
     context->setContextProperty(QLatin1String("libraries"), m_libraries);
     context->setContextProperty(QLatin1String("inboxes"),   m_inboxes);
+    context->setContextProperty(QLatin1String("mover"),     m_mover);
 
     m_quick->setSource(QUrl(QLatin1String("qrc:/photos/qml/Main.qml")));
 

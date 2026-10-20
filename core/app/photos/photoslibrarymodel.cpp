@@ -461,6 +461,7 @@ void PhotosLibraryModel::reload()
     query.model       = m_cameraModel;
     query.files       = m_files;
     query.folder      = m_folder;
+    query.roots       = (m_filter == Folder) ? QSet<int>() : m_scopeRoots;
     query.hiddenTagId = TagsCache::instance()->tagForPath(hiddenTagName());
 
     m_watcher.setFuture(QtConcurrent::run(&PhotosLibraryModel::queryEntries, query));
@@ -470,7 +471,7 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryEntries(const Query& qu
 {
     if (query.filter == Trash)
     {
-        return queryTrash();
+        return queryTrash(query.roots);
     }
 
     QString join;
@@ -645,6 +646,11 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryEntries(const Query& qu
     {
         const int rootId = values.at(i + 3).toInt();
 
+        if (!query.roots.isEmpty() && !query.roots.contains(rootId))
+        {
+            continue;       // other library (personal or shared)
+        }
+
         auto it = rootPaths.constFind(rootId);
 
         if (it == rootPaths.constEnd())
@@ -668,6 +674,7 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryEntries(const Query& qu
         entry.isVideo  = (values.at(i + 2).toInt() == DatabaseItem::Video);
         entry.dateTime = values.at(i + 5).toDateTime();
         entry.rating   = qMax(0, values.at(i + 6).toInt());
+        entry.rootId   = rootId;
 
         if ((filter == Files) && !query.files.contains(entry.filePath))
         {
@@ -711,7 +718,7 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryEntries(const Query& qu
     return result;
 }
 
-PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash()
+PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash(const QSet<int>& roots)
 {
     // Each trashed file has a JSON record with its database id and the deletion time.
 
@@ -726,10 +733,15 @@ PhotosLibraryModel::QueryResult PhotosLibraryModel::queryTrash()
         videoSuffixes.insert(suffix.trimmed().remove(QLatin1String("*.")).toLower());
     }
 
-    const QStringList roots = CollectionManager::instance()->allAvailableAlbumRootPaths();
+    const QStringList rootPaths = CollectionManager::instance()->allAvailableAlbumRootPaths();
 
-    for (const QString& root : roots)
+    for (const QString& root : rootPaths)
     {
+        if (!roots.isEmpty() && !roots.contains(CollectionManager::instance()->locationForPath(root).id()))
+        {
+            continue;       // other library (personal or shared)
+        }
+
         const QDir filesDir(root + QLatin1Char('/') + DTrash::TRASH_FOLDER +
                             QLatin1Char('/') + DTrash::FILES_FOLDER);
 
@@ -949,6 +961,21 @@ bool PhotosLibraryModel::isFavoriteAt(int row) const
 void PhotosLibraryModel::setImportDevices(const QHash<QString, QString>& deviceOfPath)
 {
     m_importDevices = deviceOfPath;
+}
+
+void PhotosLibraryModel::setScope(const QSet<int>& rootIds, const QSet<int>& sharedRootIds)
+{
+    const bool changed = (rootIds != m_scopeRoots);
+
+    m_scopeRoots  = rootIds;
+    m_sharedRoots = sharedRootIds;
+
+    if (changed)
+    {
+        reload();
+    }
+
+    emitSelectionChanged();
 }
 
 void PhotosLibraryModel::setDefaultThumbnailSize(int size)
@@ -1597,6 +1624,23 @@ QList<int> PhotosLibraryModel::selectedRows() const
     std::sort(rows.begin(), rows.end());
 
     return rows;
+}
+
+int PhotosLibraryModel::selectionLibraryKind() const
+{
+    int kind = 0;
+
+    for (const qlonglong id : std::as_const(m_selection))
+    {
+        const int row = m_rowOfId.value(id, -1);
+
+        if (row >= 0)
+        {
+            kind |= m_sharedRoots.contains(m_entries.at(row).rootId) ? 2 : 1;
+        }
+    }
+
+    return kind;
 }
 
 // --- Actions on the selection -------------------------------------------------

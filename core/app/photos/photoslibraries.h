@@ -16,6 +16,7 @@
 // Qt includes
 
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -33,15 +34,44 @@ class PhotosLibraries : public QObject
 {
     Q_OBJECT
 
-    /// QVariantMap: id, path, name, available.
+    /// QVariantMap: id, path, name, available, removable, network, syncTool, shared.
     Q_PROPERTY(QVariantList folders READ folders NOTIFY foldersChanged)
+
+    /**
+     * Personal and shared libraries, as in Apple Photos: the library folders
+     * shared with others (a NAS, a synced folder) and the personal ones (on
+     * this computer only). Shown: Both (0), Personal (1) or Shared (2);
+     * only when there are folders of both kinds.
+     */
+    Q_PROPERTY(int          scope        READ scope        WRITE setScope NOTIFY scopeChanged)
+    Q_PROPERTY(bool         hasBothKinds READ hasBothKinds NOTIFY foldersChanged)
 
 public:
 
     explicit PhotosLibraries(QObject* const parent = nullptr);
     ~PhotosLibraries() override = default;
 
-    QVariantList folders() const;
+    QVariantList folders()      const;
+    int          scope()        const;
+    void         setScope(int scope);
+    bool         hasBothKinds() const;
+
+    /// Library folders (ids) shown in the current scope; empty: all of them.
+    QSet<int>    scopeRootIds() const;
+
+    /// Library folders (ids) which are shared.
+    QSet<int>    sharedRootIds() const;
+
+    /**
+     * A folder is shared when marked so in "<folder>/.photos-imports/library.json"
+     * (which syncs with it: every computer agrees), else when it is on a
+     * network share or in a folder of a sync tool.
+     */
+    Q_INVOKABLE void    setShared(int id, bool shared);
+
+    /// Where photos moved to the personal or shared library go: the import
+    /// folder when of that kind, else the first available folder of that kind.
+    Q_INVOKABLE QString targetFolder(bool shared) const;
 
     /**
      * What opening path means (command line, file manager, Finder):
@@ -91,6 +121,15 @@ public:
 Q_SIGNALS:
 
     void foldersChanged();
+    void scopeChanged();
+
+private:
+
+    static bool isShared(const QString& path, bool network);
+
+private:
+
+    int m_scope = 0;
 };
 
 } // namespace Digikam

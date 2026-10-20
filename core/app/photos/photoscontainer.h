@@ -40,6 +40,7 @@ class PhotosSidecarVisibility;
 class PhotosImporter;
 class PhotosLibraries;
 class PhotosInboxes;
+class PhotosMover;
 
 class PhotosContainer : public QStackedWidget
 {
@@ -170,6 +171,7 @@ private:
     PhotosImporter*        m_importer    = nullptr;
     PhotosLibraries*       m_libraries   = nullptr;
     PhotosInboxes*         m_inboxes     = nullptr;
+    PhotosMover*           m_mover       = nullptr;
     QStringList            m_pendingPaths;
     QStringList            m_collapsedSections;
     bool                   m_windowReady = false;

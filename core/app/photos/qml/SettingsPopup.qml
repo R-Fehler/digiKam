@@ -147,6 +147,14 @@ Popup {
                     font.pixelSize:   13
                 }
 
+                // Personal or shared library (see PhotosLibraries::setShared()).
+                Switch {
+                    enabled:   modelData.available
+                    text:      qsTr("Shared")
+                    checked:   modelData.shared
+                    onToggled: libraries.setShared(modelData.id, checked)
+                }
+
                 Button {
                     text:      qsTr("Remove\u2026")
                     onClicked: settings.requestRemoveFolder(modelData.id, modelData.name)
@@ -157,6 +165,13 @@ Popup {
         Button {
             text:      qsTr("Add a folder\u2026")
             onClicked: settings.requestAddFolder()
+        }
+
+        Note {
+            text: qsTr("A shared folder is one you share with others: on a NAS, or synced with "
+                       + "Syncthing, Nextcloud, Dropbox or Google Drive. With folders of both kinds, "
+                       + "the sidebar switches between your Personal and the Shared library, and "
+                       + "selected photos can be moved from one to the other.")
         }
 
         Note {

@@ -1190,6 +1190,25 @@ void PhotosImporter::reloadHistory()
                 continue;
             }
 
+            // Photos moved here from another library folder: their device only.
+
+            if (record.value(QLatin1String("kind")).toString() == QLatin1String("move"))
+            {
+                const QString device = record.value(QLatin1String("device")).toString();
+
+                if (!device.isEmpty())
+                {
+                    QStringList& paths = deviceFiles[device];
+
+                    for (const QJsonValue& file : record.value(QLatin1String("files")).toArray())
+                    {
+                        paths << root + QLatin1Char('/') + file.toString();
+                    }
+                }
+
+                continue;
+            }
+
             const QDateTime date = QDateTime::fromString(record.value(QLatin1String("date")).toString(), Qt::ISODate)
                                                                                                     .toLocalTime();
 
@@ -1276,6 +1295,44 @@ void PhotosImporter::reloadHistory()
     }
 
     m_devicesWatcher.setFuture(QtConcurrent::run(&countDeviceFiles, deviceFiles));
+}
+
+QString PhotosImporter::deviceOfFile(const QString& filePath) const
+{
+    return m_deviceOfPath.value(filePath);
+}
+
+void PhotosImporter::recordMoved(const QString& root, const QHash<QString, QStringList>& relativeFiles)
+{
+    const QString dir = root + QLatin1Char('/') + QLatin1String(s_historyFolder);
+    QDir().mkpath(dir);
+    hideFolder(dir);
+
+    const QDateTime now = QDateTime::currentDateTime();
+
+    for (auto it = relativeFiles.constBegin() ; it != relativeFiles.constEnd() ; ++it)
+    {
+        const QString id = now.toString(QLatin1String("yyyyMMdd-HHmmss")) + QLatin1String("-moved-") +
+                           QString::number(QRandomGenerator::global()->bounded(0x10000), 16);
+
+        QJsonObject record;
+        record.insert(QLatin1String("version"),  1);
+        record.insert(QLatin1String("kind"),     QLatin1String("move"));
+        record.insert(QLatin1String("date"),     now.toOffsetFromUtc(now.offsetFromUtc()).toString(Qt::ISODate));
+        record.insert(QLatin1String("device"),   it.key());
+        record.insert(QLatin1String("computer"), QSysInfo::machineHostName());
+        record.insert(QLatin1String("files"),    QJsonArray::fromStringList(it.value()));
+
+        QSaveFile file(dir + QLatin1Char('/') + id + QLatin1String(".json"));
+
+        if (file.open(QIODevice::WriteOnly))
+        {
+            file.write(QJsonDocument(record).toJson());
+            file.commit();
+        }
+    }
+
+    reloadHistory();
 }
 
 void PhotosImporter::writeDeviceCheck(const QString& root, const QString& device, const QDateTime& checkedOn)
@@ -1383,26 +1440,20 @@ void PhotosImporter::slotDevicesCounted()
         Q_EMIT devicesChanged();
     }
 
+    m_deviceOfPath = result.deviceOfPath;
     m_library->setImportDevices(result.deviceOfPath);
 
-    // The device shown got new photos: show them.
+    // The device shown got new photos (an import, a move): show them.
 
     const QString key = m_library->filesKey();
 
-    if ((m_library->filter() == PhotosLibraryModel::Files) && key.startsWith(QLatin1String("device:")))
+    if (
+        (m_library->filter() == PhotosLibraryModel::Files) &&
+        key.startsWith(QLatin1String("device:"))           &&
+        (m_deviceFiles.value(key.mid(7)) != m_shownDeviceFiles)
+       )
     {
-        for (const QVariant& device : std::as_const(result.devices))
-        {
-            const QVariantMap map = device.toMap();
-
-            if (
-                (map.value(QLatin1String("name")).toString() == key.mid(7)) &&
-                (map.value(QLatin1String("count")).toInt() != m_library->count())
-               )
-            {
-                showDevice(key.mid(7));
-            }
-        }
+        showDevice(key.mid(7));
     }
 
     if (m_devicesPending)
@@ -1414,6 +1465,7 @@ void PhotosImporter::slotDevicesCounted()
 
 void PhotosImporter::showDevice(const QString& name)
 {
+    m_shownDeviceFiles = m_deviceFiles.value(name);
     m_library->showFiles(m_deviceFiles.value(name), name, QLatin1String("device:") + name);
 }
 

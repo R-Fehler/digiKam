@@ -19,6 +19,9 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QSysInfo>
@@ -82,6 +85,172 @@ PhotosLibraries::PhotosLibraries(QObject* const parent)
 
     connect(CollectionManager::instance(), &CollectionManager::locationPropertiesChanged,
             this, &PhotosLibraries::foldersChanged);
+
+    m_scope = qBound(0, KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
+                                                    .readEntry("Library Scope", 0), 2);
+
+    // A folder of the kind shown gone (removed, marked otherwise): show both.
+
+    connect(this, &PhotosLibraries::foldersChanged,
+            this, [this] ()
+        {
+            Q_EMIT scopeChanged();
+        }
+    );
+}
+
+bool PhotosLibraries::isShared(const QString& path, bool network)
+{
+    QFile marker(path + QLatin1String("/.photos-imports/library.json"));
+
+    if (marker.open(QIODevice::ReadOnly))
+    {
+        const QJsonObject json = QJsonDocument::fromJson(marker.readAll()).object();
+
+        if (json.contains(QLatin1String("shared")))
+        {
+            return json.value(QLatin1String("shared")).toBool();
+        }
+    }
+
+    return network || !syncToolOf(path).isEmpty();
+}
+
+void PhotosLibraries::setShared(int id, bool shared)
+{
+    const CollectionLocation location = CollectionManager::instance()->locationForAlbumRootId(id);
+
+    if (!location.isAvailable())
+    {
+        return;
+    }
+
+    const QString dir = location.albumRootPath() + QLatin1String("/.photos-imports");
+    QDir().mkpath(dir);
+
+    QJsonObject json;
+    QFile in(dir + QLatin1String("/library.json"));
+
+    if (in.open(QIODevice::ReadOnly))
+    {
+        json = QJsonDocument::fromJson(in.readAll()).object();
+        in.close();
+    }
+
+    json.insert(QLatin1String("shared"), shared);
+
+    QSaveFile out(dir + QLatin1String("/library.json"));
+
+    if (out.open(QIODevice::WriteOnly))
+    {
+        out.write(QJsonDocument(json).toJson());
+        out.commit();
+    }
+
+    Q_EMIT foldersChanged();
+}
+
+int PhotosLibraries::scope() const
+{
+    return hasBothKinds() ? m_scope : 0;
+}
+
+void PhotosLibraries::setScope(int scope)
+{
+    scope = qBound(0, scope, 2);
+
+    if (scope == m_scope)
+    {
+        return;
+    }
+
+    m_scope = scope;
+
+    KConfigGroup group = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
+    group.writeEntry("Library Scope", scope);
+    group.sync();
+
+    Q_EMIT scopeChanged();
+}
+
+QSet<int> PhotosLibraries::sharedRootIds() const
+{
+    QSet<int> ids;
+
+    for (const QVariant& folder : folders())
+    {
+        const QVariantMap map = folder.toMap();
+
+        if (map.value(QLatin1String("shared")).toBool())
+        {
+            ids.insert(map.value(QLatin1String("id")).toInt());
+        }
+    }
+
+    return ids;
+}
+
+bool PhotosLibraries::hasBothKinds() const
+{
+    const QVariantList all = folders();
+    const int shared       = sharedRootIds().size();
+
+    return (shared > 0) && (shared < all.size());
+}
+
+QSet<int> PhotosLibraries::scopeRootIds() const
+{
+    const int current = scope();
+
+    if (current == 0)
+    {
+        return QSet<int>();
+    }
+
+    QSet<int> ids;
+
+    for (const QVariant& folder : folders())
+    {
+        const QVariantMap map = folder.toMap();
+
+        if (map.value(QLatin1String("shared")).toBool() == (current == 2))
+        {
+            ids.insert(map.value(QLatin1String("id")).toInt());
+        }
+    }
+
+    return ids;
+}
+
+QString PhotosLibraries::targetFolder(bool shared) const
+{
+    const QString importFolder = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
+                                                            .readEntry("Import Folder", QString());
+    QString first;
+
+    for (const QVariant& folder : folders())
+    {
+        const QVariantMap map = folder.toMap();
+
+        if (!map.value(QLatin1String("available")).toBool() || (map.value(QLatin1String("shared")).toBool() != shared))
+        {
+            continue;
+        }
+
+        const QString path = map.value(QLatin1String("path")).toString();
+
+        if (path == importFolder)
+        {
+            return path;
+        }
+
+        if (first.isEmpty())
+        {
+            first = path;
+        }
+    }
+
+    return first;
 }
 
 QVariantList PhotosLibraries::folders() const
@@ -112,6 +281,9 @@ QVariantList PhotosLibraries::folders() const
         folder.insert(QLatin1String("network"),   (location.type() == CollectionLocation::Network) ||
                                                   (location.isAvailable() && isNetworkPath(path)));
         folder.insert(QLatin1String("syncTool"),  location.isAvailable() ? syncToolOf(path) : QString());
+        folder.insert(QLatin1String("shared"),    location.isAvailable()
+                                                  ? isShared(path, folder.value(QLatin1String("network")).toBool())
+                                                  : (location.type() == CollectionLocation::Network));
         folders << folder;
     }
 
