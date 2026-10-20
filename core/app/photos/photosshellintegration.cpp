@@ -41,10 +41,14 @@ namespace PhotosShellIntegration
 namespace
 {
 
+#if !defined(Q_OS_MACOS)
+
 QString menuLabel()
 {
     return i18nc("@action: file manager context menu", "Open in Photos");
 }
+
+#endif
 
 #if defined(Q_OS_WIN)
 

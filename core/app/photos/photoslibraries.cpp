@@ -17,6 +17,7 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QJsonDocument>
