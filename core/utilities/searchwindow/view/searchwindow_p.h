@@ -54,7 +54,16 @@
 #include "searchqueryengine.h"
 #include "searchlanguagebackend.h"
 #include "searchmockbackend.h"
-#include "searchllamabackend.h"
+
+#ifdef HAVE_LLAMACPP
+
+    // Only built with llama.cpp. MSVC references all members of an exported
+    // class in every file which includes its header, and the link then fails.
+
+#   include "searchllamabackend.h"
+
+#endif
+
 #include "searchnlmodelmanager.h"
 #include "searchpromptbuilder.h"
 #include "searchintentparser.h"

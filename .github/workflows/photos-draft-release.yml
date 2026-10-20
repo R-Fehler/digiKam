@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Draft a release of digiKam Photos from an existing build.
+#
+#   git tag photos-v9.2.0-preview1 && git push origin photos-v9.2.0-preview1
+#
+# or, without pushing a tag, write the version into streamline/release/draft-version
+# and push that on the development branch: the tag photos-v<version> is then
+# created on that commit when the draft is published.
+#
+# Does not rebuild: uses the newest "Photos build and release" run whose commit
+# is the tagged commit or one of its ancestors (later commits that only touch
+# docs do not start a build). The draft is created as soon as that run's Linux
+# AppImage is ready; the Windows / macOS packages are added when their jobs
+# succeed. Review the draft on GitHub, then publish it.
+
+name: Photos draft release
+
+on:
+  push:
+    tags:
+      - "photos-v*"
+    branches:
+      - ccr-f0904072-4betfm
+    paths:
+      - "streamline/release/draft-version"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Release tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            version=$(gh api "repos/${GH_REPO}/contents/streamline/release/draft-version?ref=${GITHUB_SHA}" \
+                        --jq .content | base64 -d | grep -v '^#' | head -n1 | tr -d '[:space:]')
+            tag="photos-v${version#photos-v}"
+          fi
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            echo "::error::A release ${tag} already exists"
+            exit 1
+          fi
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+          echo "Release tag: ${tag}"
+
+      - name: Find the build of the tagged commit
+        id: build
+        run: |
+          while read -r id sha; do
+            # The build's commit must be the tagged commit or an ancestor of it.
+            rel=$(gh api "repos/${GH_REPO}/compare/${sha}...${GITHUB_SHA}" --jq .status 2>/dev/null || true)
+            if [ "${rel}" = "identical" ] || [ "${rel}" = "ahead" ]; then
+              echo "run_id=${id}" >> "$GITHUB_OUTPUT"
+              echo "run_sha=${sha}" >> "$GITHUB_OUTPUT"
+              echo "Using build run ${id} of ${sha}"
+              exit 0
+            fi
+          done < <(gh run list --workflow photos-release.yml --event push --limit 30 \
+                     --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')
+          echo "::error::No build of ${GITHUB_SHA} or of an ancestor found"
+          exit 1
+
+      - name: Wait for the Linux AppImage
+        env:
+          RUN_ID: ${{ steps.build.outputs.run_id }}
+        run: |
+          while true; do
+            # Nothing to read while the job is not created yet.
+            status="" conclusion=""
+            read -r status conclusion < <(gh run view "${RUN_ID}" --json jobs \
+              --jq '.jobs[] | select(.name == "linux") | "\(.status) \(.conclusion)"') || true
+            if [ "${status}" = "completed" ]; then
+              [ "${conclusion}" = "success" ] && exit 0
+              echo "::error::The Linux job of run ${RUN_ID} concluded ${conclusion}"
+              exit 1
+            fi
+            echo "Linux job: ${status:-not started}, waiting..."
+            sleep 120
+          done
+
+      - name: Create the draft release
+        env:
+          RUN_ID: ${{ steps.build.outputs.run_id }}
+          RUN_SHA: ${{ steps.build.outputs.run_sha }}
+        run: |
+          mkdir -p dist
+          gh run download "${RUN_ID}" --name linux-appimage --dir dist
+          # The Ubuntu 22.04 compatible AppImage, when it passed its test there.
+          compat=$(gh run view "${RUN_ID}" --json jobs --jq '.jobs[] | select(.name == "linux-compat-test") | .conclusion')
+          if [ "${compat}" = "success" ]; then
+            gh run download "${RUN_ID}" --name linux-compat-appimage --dir dist
+          else
+            echo "No tested Ubuntu 22.04 compatible AppImage in run ${RUN_ID} (${compat:-no such job})"
+          fi
+          streamline_notes() {
+            local version="${TAG#photos-v}"
+            has() { ls dist/$1 > /dev/null 2>&1 && echo "yes" || echo "not (yet) in this release"; }
+            cat <<EOF
+          digiKam with **Photos mode**, a streamlined photo library view in the style of Apple Photos / Google Photos, built on top of stock digiKam ${version%%-*}.
+
+          Photos mode works on the same database, thumbnails and files as stock digiKam: you can switch between the two at any time (Ctrl+Shift+P), and go back to stock digiKam without migrating anything. Photos mode keeps its own settings file (\`digikam-photosrc\`), copied from \`digikamrc\` the first time.
+
+          ## Downloads
+
+          | System | Package | Included |
+          |---|---|---|
+          | Linux (x86_64, Ubuntu 22.04 / Debian 12 / Fedora 36 or newer) | \`digiKam-Photos-*-glibc2.34-x86_64.AppImage\` | $(has '*-glibc2.34-*.AppImage') |
+          | Linux (x86_64, Ubuntu 24.04 / Debian 13 / Fedora 40 or newer) | \`digiKam-Photos-*-x86_64.AppImage\` | $(has '*.AppImage') |
+          | Windows 10/11 (x86_64) | \`*.exe\` installer | $(has '*.exe') |
+          | macOS 13+ (Apple Silicon) | \`*.dmg\` | $(has '*.dmg') |
+
+          **Linux**: \`chmod +x digiKam-Photos-*.AppImage\` and run it. It starts in Photos mode; \`--classic\` starts the stock interface. Includes ExifTool and the map (OpenStreetMap). The \`-glibc2.34\` AppImage is built like the official digiKam AppImage (KDE Craft, AlmaLinux 9) and runs on older distributions such as Ubuntu 22.04; the other one is built on Ubuntu 24.04.
+
+          **Windows / macOS**: unsigned builds made with KDE Craft. Windows SmartScreen asks for confirmation; on macOS use right-click → Open the first time. Start with \`--photos\`, or press Ctrl+Shift+P to switch.
+
+          ## Notes
+
+          - Back up your digiKam database before trying a preview build.
+          - Do not run stock digiKam and digiKam Photos at the same time on the same database.
+
+          Built from ${RUN_SHA} (https://github.com/${GH_REPO}/actions/runs/${RUN_ID}).
+          EOF
+          }
+          declare -f streamline_notes > notes-fn.sh
+          streamline_notes > notes.md
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            target=(--verify-tag)
+          else
+            target=(--target "${GITHUB_SHA}")    # Tag created when the draft is published.
+          fi
+          gh release create "${TAG}" dist/* --draft --prerelease "${target[@]}" \
+             --title "digiKam Photos ${TAG#photos-v}" --notes-file notes.md
+
+      - name: Add the Windows and macOS packages
+        env:
+          RUN_ID: ${{ steps.build.outputs.run_id }}
+          RUN_SHA: ${{ steps.build.outputs.run_sha }}
+        run: |
+          until [ "$(gh run view "${RUN_ID}" --json status --jq .status)" = "completed" ]; do
+            echo "Waiting for the Windows and macOS jobs..."
+            sleep 300
+          done
+          added=0
+          for name in windows-installer macos-dmg; do
+            if gh run download "${RUN_ID}" --name "${name}" --dir "extra-${name}"; then
+              gh release upload "${TAG}" extra-${name}/* --clobber
+              cp extra-${name}/* dist/
+              added=1
+            else
+              echo "No ${name} package in run ${RUN_ID}"
+            fi
+          done
+          if [ "${added}" = "1" ]; then
+            source notes-fn.sh
+            streamline_notes > notes.md
+            gh release edit "${TAG}" --notes-file notes.md
+          fi

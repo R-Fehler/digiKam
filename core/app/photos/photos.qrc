@@ -1,0 +1,20 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/photos">
+        <file>qml/Main.qml</file>
+        <file>qml/Sidebar.qml</file>
+        <file>qml/PhotoGrid.qml</file>
+        <file>qml/PhotoTile.qml</file>
+        <file>qml/Viewer.qml</file>
+        <file>qml/IconButton.qml</file>
+        <file>qml/AlbumPopup.qml</file>
+        <file>qml/Filmstrip.qml</file>
+        <file>qml/ImportSheet.qml</file>
+        <file>qml/ImportsPage.qml</file>
+        <file>qml/SettingsPopup.qml</file>
+        <file>qml/InfoPanel.qml</file>
+        <file>qml/VideoPlayer.qml</file>
+        <file>qml/DatabaseBanner.qml</file>
+        <file>qml/InboxPopup.qml</file>
+    </qresource>
+</RCC>

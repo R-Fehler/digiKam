@@ -159,6 +159,10 @@
 #include "facetrainingupgradedlg.h"
 #include "peoplesidebarwidget.h"
 
+#ifdef HAVE_PHOTOSMODE
+#   include "photosmode.h"
+#endif
+
 #ifdef HAVE_GEOLOCATION
 #   include "geolocationsettings.h"
 #endif

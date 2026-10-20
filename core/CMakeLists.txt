@@ -61,6 +61,24 @@ find_package(Threads)       # For DNGWriter and LibRaw which needs native thread
 find_package(Libheif)       # For HEIF support.
 find_package(Libjxl)        # For JPEG-XL support with DNGWriter.
 
+# Boost headers (Boost Graph, Boost UUID in the XMP SDK) for every target: they
+# are not in a default include path everywhere (KDE Craft on macOS / Windows).
+
+if(Boost_FOUND)
+
+    if(TARGET Boost::headers)
+
+        get_target_property(BOOST_HEADERS_INCLUDE_DIRS Boost::headers INTERFACE_INCLUDE_DIRECTORIES)
+        include_directories(SYSTEM ${BOOST_HEADERS_INCLUDE_DIRS})
+
+    elseif(Boost_INCLUDE_DIRS)
+
+        include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+
+    endif()
+
+endif()
+
 if(HEIF_FOUND)
 
     find_package(X265)      # For HEIF encoding support.

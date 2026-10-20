@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=digiKam Photos
+GenericName=Photo Library
+Comment=Browse your photos with digiKam's streamlined Photos mode
+Exec=digikam --photos %U
+Icon=digikam
+Terminal=false
+Categories=Qt;KDE;Graphics;Photography;
+MimeType=image/jpeg;image/png;image/tiff;image/heif;image/webp;
+Keywords=photos;pictures;album;library;

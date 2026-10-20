@@ -101,6 +101,10 @@ using namespace Magick;
 #include "filesdownloader.h"
 #include "dfileoperations.h"
 
+#ifdef HAVE_PHOTOSMODE
+#   include "photosmode.h"
+#endif
+
 #ifdef Q_OS_WIN
 #   include <windows.h>
 #   include <shellapi.h>
@@ -119,6 +123,15 @@ using namespace Digikam;
 
 MAIN_EXPORT int MAIN_FN(int argc, char** argv)
 {
+
+#ifdef HAVE_PHOTOSMODE
+
+    // Must run before any configuration access: Photos mode uses its own config file.
+
+    PhotosMode::preInitialize(argc, argv);
+
+#endif
+
     SystemSettings system(QLatin1String("digikam"));
 
     KMemoryInfo memInfo;
@@ -245,8 +258,25 @@ MAIN_EXPORT int MAIN_FN(int argc, char** argv)
                                         i18n("Start digikam with the configuration file \"config\""),
                                         QLatin1String("config")));
 
+#ifdef HAVE_PHOTOSMODE
+
+    PhotosMode::addCommandLineOptions(parser);
+
+#endif
+
     parser.process(app);
     aboutData.processCommandLine(&parser);
+
+#ifdef HAVE_PHOTOSMODE
+
+    // "digikam --photos <folder>" while Photos mode runs: open it there.
+
+    if (PhotosMode::forwardToRunningInstance(parser))
+    {
+        return 0;
+    }
+
+#endif
 
     // See bug #438701
 
@@ -447,7 +477,18 @@ MAIN_EXPORT int MAIN_FN(int argc, char** argv)
     digikam->restoreSession();
     digikam->show();
 
-    if (system.enableAIAutoTools || system.enableFaceEngine || system.enableAesthetic || system.enableAutoTags)
+    bool askForModelFiles = (system.enableAIAutoTools || system.enableFaceEngine ||
+                             system.enableAesthetic   || system.enableAutoTags);
+
+#ifdef HAVE_PHOTOSMODE
+
+    // Photos mode does not use the AI features yet: do not interrupt startup.
+
+    askForModelFiles = askForModelFiles && !PhotosMode::isEnabled();
+
+#endif
+
+    if (askForModelFiles)
     {
         QPointer<FilesDownloader> floader = new FilesDownloader(digikam);
 
