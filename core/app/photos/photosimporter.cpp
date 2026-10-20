@@ -806,17 +806,23 @@ void PhotosImporter::slotScanned()
         }
     }
 
-    // Suggested device name: the camera of most photos, else the volume name.
+    // Suggested device name: the one given at the last import from this
+    // source, else the camera of most photos, else the volume name.
 
-    QString device;
-    int best = 0;
+    QString device = m_deviceOfSource.value(QDir::cleanPath(m_scan.source));
+    const bool knownDevice = !device.isEmpty();
 
-    for (auto it = devices.constBegin() ; it != devices.constEnd() ; ++it)
+    if (!knownDevice)
     {
-        if (it.value() > best)
+        int best = 0;
+
+        for (auto it = devices.constBegin() ; it != devices.constEnd() ; ++it)
         {
-            best   = it.value();
-            device = it.key();
+            if (it.value() > best)
+            {
+                best   = it.value();
+                device = it.key();
+            }
         }
     }
 
@@ -833,6 +839,16 @@ void PhotosImporter::slotScanned()
 
     const QLocale locale;
 
+    // Nothing new on a device imported before: everything on it is in the
+    // library now, which tells what can be deleted from it.
+
+    if ((newCount == 0) && knownDevice && !m_scan.files.isEmpty() && !importFolder().isEmpty())
+    {
+        writeDeviceCheck(importFolder(), device, QDateTime::currentDateTime());
+        reloadHistory();
+    }
+
+    m_summary.insert(QLatin1String("knownDevice"),   knownDevice);
     m_summary.insert(QLatin1String("newCount"),      newCount);
     m_summary.insert(QLatin1String("existingCount"), existingCount);
     m_summary.insert(QLatin1String("device"),        device);
@@ -900,21 +916,56 @@ void PhotosImporter::slotImported()
     const QString root        = importFolder();
     QString importId;
 
+    // What is in the library now: the files there already, and the copies.
+    // The first file left out (failed, or after Stop) limits what can be
+    // deleted from the device: the photos taken before it.
+
+    QSet<QString> copiedSources;
+
+    for (const QPair<QString, QString>& pair : result.pairs)
+    {
+        copiedSources.insert(pair.first);
+    }
+
+    Safety safety;
+    safety.complete = true;
+
+    for (const Candidate& file : std::as_const(m_scan.files))
+    {
+        if (!file.existing && !copiedSources.contains(file.path))
+        {
+            safety.complete = false;
+
+            if (file.date.isValid() && (!safety.safeBefore.isValid() || (file.date < safety.safeBefore)))
+            {
+                safety.safeBefore = file.date;
+            }
+        }
+    }
+
+    if (safety.complete)
+    {
+        safety.safeBefore = m_startTime;
+    }
+
     if (!result.copied.isEmpty())
     {
         // History record, with the device: photos nobody touches get no
         // sidecar (see devices()).
 
         importId = writeRecord(root, m_deviceName, m_scan.source, result.copied,
-                               m_summary.value(QLatin1String("existingCount")).toInt(), m_startTime, QString());
+                               m_summary.value(QLatin1String("existingCount")).toInt(), m_startTime, QString(),
+                               safety);
     }
+
+    reloadHistory();
 
     m_summary.insert(QLatin1String("importedCount"), result.copied.size());
     m_summary.insert(QLatin1String("failedCount"),   result.failed);
     m_summary.insert(QLatin1String("importId"),      importId);
     m_summary.insert(QLatin1String("canceled"),      result.canceled);
+    m_summary.insert(QLatin1String("safety"),        importId.isEmpty() ? QVariantMap() : deviceSafety(m_deviceName));
 
-    reloadHistory();
     setState(Done);
 
     if (!importId.isEmpty())
@@ -929,7 +980,7 @@ void PhotosImporter::slotImported()
 
 QString PhotosImporter::writeRecord(const QString& root, const QString& device, const QString& source,
                                     const QStringList& copied, int skipped, const QDateTime& startTime,
-                                    const QString& inboxId)
+                                    const QString& inboxId, const Safety& safety)
 {
     const QString importId = startTime.toString(QLatin1String("yyyyMMdd-HHmmss")) + QLatin1Char('-') +
                              QString::number(QRandomGenerator::global()->bounded(0x10000), 16);
@@ -946,6 +997,16 @@ QString PhotosImporter::writeRecord(const QString& root, const QString& device, 
     if (!inboxId.isEmpty())
     {
         record.insert(QLatin1String("inbox"), inboxId);
+    }
+
+    // What can be deleted from the device (see deviceSafety()).
+
+    record.insert(QLatin1String("complete"), safety.complete);
+
+    if (safety.safeBefore.isValid())
+    {
+        record.insert(QLatin1String("safeBefore"), safety.safeBefore.toOffsetFromUtc(safety.safeBefore.offsetFromUtc())
+                                                                    .toString(Qt::ISODate));
     }
 
     const QString dir = root + QLatin1Char('/') + QLatin1String(s_historyFolder);
@@ -1018,8 +1079,15 @@ void PhotosImporter::slotBackgroundImported()
 
     if (!result.copied.isEmpty())
     {
+        // An inbox holds what the device sent: all of it is in the library
+        // when nothing failed.
+
+        Safety safety;
+        safety.complete   = (result.failed == 0);
+        safety.safeBefore = safety.complete ? m_currentJob.started : QDateTime();
+
         importId = writeRecord(m_currentJob.root, m_currentJob.device, m_currentJob.source, result.copied,
-                               result.existing, m_currentJob.started, m_currentJob.inboxId);
+                               result.existing, m_currentJob.started, m_currentJob.inboxId, safety);
 
         reloadHistory();
 
@@ -1053,7 +1121,26 @@ void PhotosImporter::reloadHistory()
 {
     QVariantList history;
     QHash<QString, QStringList> deviceFiles;
+    QHash<QString, QVariantMap> safety;
+    QHash<QString, QDateTime>   sourceDate;
     const QLocale locale;
+
+    m_deviceOfSource.clear();
+
+    // The newest check of a device wins.
+
+    auto addCheck = [&safety] (const QString& device, const QVariantMap& check)
+    {
+        const QDateTime checkedOn = check.value(QLatin1String("checkedOn")).toDateTime();
+
+        if (
+            !device.isEmpty() && checkedOn.isValid() &&
+            (safety.value(device).value(QLatin1String("checkedOn")).toDateTime() < checkedOn)
+           )
+        {
+            safety.insert(device, check);
+        }
+    };
 
     const QStringList roots = libraryFolders();
 
@@ -1077,7 +1164,28 @@ void PhotosImporter::reloadHistory()
 
             const QJsonObject record = QJsonDocument::fromJson(file.readAll()).object();
 
-            if (record.isEmpty())
+            // Device checks (devices.json, and the conflict copies sync tools make of it).
+
+            if (name.startsWith(QLatin1String("devices")))
+            {
+                for (auto it = record.constBegin() ; it != record.constEnd() ; ++it)
+                {
+                    const QDateTime checkedOn = QDateTime::fromString(it.value().toObject()
+                                                                        .value(QLatin1String("checkedOn")).toString(),
+                                                                      Qt::ISODate).toLocalTime();
+                    QVariantMap check;
+                    check.insert(QLatin1String("checkedOn"),  checkedOn);
+                    check.insert(QLatin1String("safeBefore"), checkedOn);
+                    check.insert(QLatin1String("complete"),   true);
+                    addCheck(it.key(), check);
+                }
+
+                continue;
+            }
+
+            // Not an import record (inboxes.json...).
+
+            if (!record.value(QLatin1String("files")).isArray())
             {
                 continue;
             }
@@ -1100,6 +1208,33 @@ void PhotosImporter::reloadHistory()
             history << entry;
 
             const QString device = record.value(QLatin1String("device")).toString();
+            const bool undone    = record.contains(QLatin1String("undone"));
+
+            if (!device.isEmpty() && !undone && record.contains(QLatin1String("complete")))
+            {
+                QVariantMap check;
+                check.insert(QLatin1String("checkedOn"),  date);
+                check.insert(QLatin1String("complete"),   record.value(QLatin1String("complete")).toBool());
+                check.insert(QLatin1String("inbox"),      !record.value(QLatin1String("inbox")).toString().isEmpty());
+                check.insert(QLatin1String("safeBefore"),
+                             QDateTime::fromString(record.value(QLatin1String("safeBefore")).toString(), Qt::ISODate)
+                                                                                                    .toLocalTime());
+                addCheck(device, check);
+            }
+
+            // The device name to suggest when importing from this source again.
+
+            const QString source = QDir::cleanPath(record.value(QLatin1String("source")).toString());
+
+            if (
+                !device.isEmpty() && !undone && !source.isEmpty() &&
+                record.value(QLatin1String("inbox")).toString().isEmpty() &&
+                (!sourceDate.contains(source) || (sourceDate.value(source) < date))
+               )
+            {
+                sourceDate.insert(source, date);
+                m_deviceOfSource.insert(source, device);
+            }
 
             if (!device.isEmpty())
             {
@@ -1121,9 +1256,10 @@ void PhotosImporter::reloadHistory()
         }
     );
 
-    if (history != m_history)
+    if ((history != m_history) || (safety != m_safety))
     {
         m_history = history;
+        m_safety  = safety;
 
         Q_EMIT historyChanged();
     }
@@ -1140,6 +1276,95 @@ void PhotosImporter::reloadHistory()
     }
 
     m_devicesWatcher.setFuture(QtConcurrent::run(&countDeviceFiles, deviceFiles));
+}
+
+void PhotosImporter::writeDeviceCheck(const QString& root, const QString& device, const QDateTime& checkedOn)
+{
+    const QString dir  = root + QLatin1Char('/') + QLatin1String(s_historyFolder);
+    const QString path = dir + QLatin1String("/devices.json");
+
+    QDir().mkpath(dir);
+    hideFolder(dir);
+
+    QJsonObject json;
+    QFile in(path);
+
+    if (in.open(QIODevice::ReadOnly))
+    {
+        json = QJsonDocument::fromJson(in.readAll()).object();
+        in.close();
+    }
+
+    QJsonObject check;
+    check.insert(QLatin1String("checkedOn"), checkedOn.toOffsetFromUtc(checkedOn.offsetFromUtc()).toString(Qt::ISODate));
+    check.insert(QLatin1String("computer"),  QSysInfo::machineHostName());
+    json.insert(device, check);
+
+    QSaveFile out(path);
+
+    if (out.open(QIODevice::WriteOnly))
+    {
+        out.write(QJsonDocument(json).toJson());
+        out.commit();
+    }
+}
+
+QVariantMap PhotosImporter::deviceSafety(const QString& name) const
+{
+    QVariantMap check = m_safety.value(name);
+
+    if (check.isEmpty())
+    {
+        return check;
+    }
+
+    const QLocale locale;
+
+    auto when = [&locale] (const QDateTime& date)
+    {
+        const QDate today = QDate::currentDate();
+
+        if (date.date() == today)
+        {
+            return i18nc("@info: time today", "today at %1", locale.toString(date.time(), QLocale::ShortFormat));
+        }
+
+        return i18nc("@info: date and time", "%1 at %2",
+                     locale.toString(date.date(), QLocale::LongFormat),
+                     locale.toString(date.time(), QLocale::ShortFormat));
+    };
+
+    const QDateTime checkedOn  = check.value(QLatin1String("checkedOn")).toDateTime();
+    const QDateTime safeBefore = check.value(QLatin1String("safeBefore")).toDateTime();
+    const bool complete        = check.value(QLatin1String("complete")).toBool();
+    const bool inbox           = check.value(QLatin1String("inbox")).toBool();
+    QString text;
+
+    if (inbox)
+    {
+        text = complete ? i18n("Everything %1 sent up to %2 is in the library.", name, when(checkedOn))
+                        : i18n("Some photos %1 sent on %2 could not be imported: keep them on the device "
+                               "for now.", name, when(checkedOn));
+    }
+    else if (complete)
+    {
+        text = i18n("Everything that was on %1 %2 is in the library. You can delete those photos and videos "
+                    "from it.", name, when(checkedOn));
+    }
+    else if (safeBefore.isValid())
+    {
+        text = i18n("Photos and videos taken before %1 are in the library: you can delete those from %2. "
+                    "Keep the newer ones until they are imported.", when(safeBefore), name);
+    }
+    else
+    {
+        text = i18n("Not everything on %1 could be imported: keep its photos for now.", name);
+    }
+
+    check.insert(QLatin1String("known"), true);
+    check.insert(QLatin1String("text"),  text);
+
+    return check;
 }
 
 QVariantList PhotosImporter::devices() const
@@ -1159,6 +1384,26 @@ void PhotosImporter::slotDevicesCounted()
     }
 
     m_library->setImportDevices(result.deviceOfPath);
+
+    // The device shown got new photos: show them.
+
+    const QString key = m_library->filesKey();
+
+    if ((m_library->filter() == PhotosLibraryModel::Files) && key.startsWith(QLatin1String("device:")))
+    {
+        for (const QVariant& device : std::as_const(result.devices))
+        {
+            const QVariantMap map = device.toMap();
+
+            if (
+                (map.value(QLatin1String("name")).toString() == key.mid(7)) &&
+                (map.value(QLatin1String("count")).toInt() != m_library->count())
+               )
+            {
+                showDevice(key.mid(7));
+            }
+        }
+    }
 
     if (m_devicesPending)
     {

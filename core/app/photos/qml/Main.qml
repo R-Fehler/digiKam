@@ -406,6 +406,47 @@ Rectangle {
                 color:                  root.separatorColor
             }
 
+            // A device named at import: what can be deleted from it.
+            Rectangle {
+                id: deviceSafety
+
+                readonly property string device: (!root.importsPage && (library.filter === 4) &&
+                                                  library.filesKey.startsWith("device:"))
+                                                 ? library.filesKey.substring(7) : ""
+                readonly property var safety: (device.length > 0) && (importer.history.length >= 0)
+                                              ? importer.deviceSafety(device) : ({})
+                readonly property bool ok: (safety.complete === true)
+
+                Layout.fillWidth:       true
+                Layout.preferredHeight: safetyText.implicitHeight + 14
+                visible:                safety.known === true
+                color:                  ok ? Qt.rgba(0.2, 0.65, 0.35, 0.12) : Qt.rgba(0.9, 0.6, 0.1, 0.14)
+
+                Text {
+                    id: safetyMark
+                    anchors.left:           parent.left
+                    anchors.leftMargin:     16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text:                   deviceSafety.ok ? "\u2713" : "!"
+                    color:                  deviceSafety.ok ? "#2e9e55" : "#c07a10"
+                    font.pixelSize:         14
+                    font.bold:              true
+                }
+
+                Text {
+                    id: safetyText
+                    anchors.left:           safetyMark.right
+                    anchors.leftMargin:     8
+                    anchors.right:          parent.right
+                    anchors.rightMargin:    16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text:                   deviceSafety.safety.text || ""
+                    wrapMode:               Text.WordWrap
+                    color:                  palette.windowText
+                    font.pixelSize:         12
+                }
+            }
+
             // The library database must stay on this computer (see PhotosLibraries::databaseCheck()).
             DatabaseBanner {
                 Layout.fillWidth: true

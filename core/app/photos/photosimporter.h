@@ -136,6 +136,19 @@ public:
     /// Number of photos of an import still in the library.
     Q_INVOKABLE int     remainingCount(const QString& importId) const;
 
+    /**
+     * What can be deleted from a device named at import, from its last check
+     * (an import, or a scan finding nothing new). QVariantMap:
+     *  - known:      there was a check;
+     *  - complete:   everything on the device then was in the library;
+     *  - checkedOn:  when (QDateTime);
+     *  - safeBefore: photos and videos taken before this are in the library;
+     *  - inbox:      the device sends its photos to an inbox (what it sent is in);
+     *  - text:       the sentence to show.
+     * Empty when the device was never checked. Updated with history.
+     */
+    Q_INVOKABLE QVariantMap deviceSafety(const QString& name) const;
+
 Q_SIGNALS:
 
     void sourcesChanged();
@@ -225,9 +238,19 @@ private:
     void slotBackgroundImported();
     void startNextBackground();
 
+    /// Safety of the source after an import: see deviceSafety().
+    struct Safety
+    {
+        QDateTime safeBefore;
+        bool      complete = false;
+    };
+
     QString writeRecord(const QString& root, const QString& device, const QString& source,
                         const QStringList& copied, int skipped, const QDateTime& startTime,
-                        const QString& inboxId);
+                        const QString& inboxId, const Safety& safety);
+
+    /// Remembers a check of a device which found nothing new (see deviceSafety()).
+    void        writeDeviceCheck(const QString& root, const QString& device, const QDateTime& checkedOn);
 
     QVariantMap readImport(const QString& importId, QString* const filePath = nullptr) const;
     QStringList importedPaths(const QVariantMap& record)                                const;
@@ -253,6 +276,8 @@ private:
     QList<BackgroundJob>           m_queue;
     BackgroundJob                  m_currentJob;
     QHash<QString, QStringList>    m_deviceFiles;
+    QHash<QString, QVariantMap>    m_safety;           ///< by device: last check
+    QHash<QString, QString>        m_deviceOfSource;   ///< source folder -> device of its last import
     QVariantList                   m_devices;
     bool                           m_devicesPending = false;
     QObject*                       m_progressTimer = nullptr;

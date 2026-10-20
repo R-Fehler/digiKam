@@ -66,6 +66,45 @@ Popup {
         font.pixelSize:   13
     }
 
+    // A check mark and what can be deleted from the device.
+    component SafeNote: Rectangle {
+        id: safeNote
+
+        property string text: ""
+        property bool   ok:   true
+
+        Layout.fillWidth: true
+        implicitHeight:   safeText.implicitHeight + 16
+        radius:           8
+        color:            ok ? Qt.rgba(0.2, 0.65, 0.35, 0.14) : Qt.rgba(0.9, 0.6, 0.1, 0.16)
+
+        Text {
+            id: safeMark
+            anchors.left:       parent.left
+            anchors.leftMargin: 10
+            anchors.top:        parent.top
+            anchors.topMargin:  8
+            text:               safeNote.ok ? "\u2713" : "!"
+            color:              safeNote.ok ? "#2e9e55" : "#c07a10"
+            font.pixelSize:     14
+            font.bold:          true
+        }
+
+        Text {
+            id: safeText
+            anchors.left:        safeMark.right
+            anchors.leftMargin:  8
+            anchors.right:       parent.right
+            anchors.rightMargin: 10
+            anchors.top:         parent.top
+            anchors.topMargin:   8
+            text:                safeNote.text
+            wrapMode:            Text.WordWrap
+            color:               palette.windowText
+            font.pixelSize:      13
+        }
+    }
+
     component SourceButton: Rectangle {
         id: sourceButton
 
@@ -229,7 +268,7 @@ Popup {
             readonly property int existingCount: importer.summary.existingCount || 0
 
             Title {
-                text: (parent.newCount === 0) ? qsTr("Nothing new to import")
+                text: (parent.newCount === 0) ? qsTr("Everything is already in your library")
                                               : (parent.newCount === 1) ? qsTr("1 new photo or video")
                                                                         : qsTr("%L1 new photos and videos").arg(parent.newCount)
             }
@@ -239,8 +278,17 @@ Popup {
                 text:    importer.summary.dateRange || ""
             }
 
+            // Nothing new: all of it can go from the device.
+            SafeNote {
+                visible: parent.newCount === 0 && parent.existingCount > 0
+                text:    (parent.existingCount === 1)
+                         ? qsTr("The photo or video here is in your library: you can delete it from the device.")
+                         : qsTr("All %L1 photos and videos here are in your library: you can delete them from the device.")
+                               .arg(parent.existingCount)
+            }
+
             Note {
-                visible: parent.existingCount > 0
+                visible: parent.newCount > 0 && parent.existingCount > 0
                 text:    (parent.existingCount === 1) ? qsTr("1 is already in your library and will be skipped.")
                                                       : qsTr("%L1 are already in your library and will be skipped.")
                                                             .arg(parent.existingCount)
@@ -279,6 +327,12 @@ Popup {
                 }
 
                 Item { Layout.fillWidth: true }
+
+                Button {
+                    visible:   parent.parent.newCount === 0
+                    text:      qsTr("Done")
+                    onClicked: sheet.close()
+                }
 
                 Button {
                     visible:   parent.parent.newCount > 0
@@ -338,6 +392,14 @@ Popup {
                 text:    qsTr("%L1 could not be copied (see the log).").arg(parent.failed)
                 color:   "#d04040"
                 opacity: 1
+            }
+
+            // What can be deleted from the device now.
+            SafeNote {
+                readonly property var safety: importer.summary.safety || ({})
+                visible: safety.known === true
+                ok:      safety.complete === true
+                text:    safety.text || ""
             }
 
             Note {
