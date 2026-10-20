@@ -85,14 +85,78 @@ Rectangle {
         }
     }
 
-    component SectionTitle: Text {
-        Layout.topMargin:    16
-        Layout.bottomMargin: 2
-        Layout.leftMargin:   6
-        color:               palette.windowText
-        opacity:             0.6
-        font.pixelSize:      12
-        font.bold:           true
+    function isCollapsed(key) {
+        return photosApp.collapsedSections.indexOf(key) >= 0
+    }
+
+    function toggleSection(key) {
+        const keys = photosApp.collapsedSections.slice()
+        const at   = keys.indexOf(key)
+
+        if (at >= 0)
+            keys.splice(at, 1)
+        else
+            keys.push(key)
+
+        photosApp.collapsedSections = keys
+    }
+
+    // Section header: click to fold or unfold its items (remembered).
+    component SectionTitle: Rectangle {
+        id: title
+
+        property string key:  ""
+        property string text: ""
+        readonly property bool collapsed: sidebar.isCollapsed(key)
+
+        Layout.fillWidth:    true
+        Layout.topMargin:    12
+        implicitHeight:      24
+        radius:              4
+        color:               titleMouse.containsMouse ? Qt.rgba(palette.windowText.r, palette.windowText.g,
+                                                                palette.windowText.b, 0.05)
+                                                      : "transparent"
+
+        Text {
+            anchors.left:           parent.left
+            anchors.leftMargin:     6
+            anchors.verticalCenter: parent.verticalCenter
+            text:                   title.text
+            color:                  palette.windowText
+            opacity:                0.6
+            font.pixelSize:         12
+            font.bold:              true
+        }
+
+        Text {
+            anchors.right:          parent.right
+            anchors.rightMargin:    8
+            anchors.verticalCenter: parent.verticalCenter
+            text:                   title.collapsed ? "\u203A" : "\u2304"
+            color:                  palette.windowText
+            opacity:                titleMouse.containsMouse || title.collapsed ? 0.6 : 0.0
+            font.pixelSize:         title.collapsed ? 16 : 12
+        }
+
+        MouseArea {
+            id: titleMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape:  Qt.PointingHandCursor
+            onClicked:    sidebar.toggleSection(title.key)
+        }
+
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+    }
+
+    // The items of a section, hidden when it is folded.
+    component Section: ColumnLayout {
+        property string key: ""
+
+        Layout.fillWidth: true
+        spacing:          2
+        visible:          !sidebar.isCollapsed(key)
     }
 
     ColumnLayout {
@@ -177,61 +241,71 @@ Rectangle {
                 // --- Albums -----------------------------------------------------
 
                 SectionTitle {
+                    key:  "albums"
                     text: qsTr("Albums")
                 }
 
-                Repeater {
-                    model: library.albums
+                Section {
+                    key: "albums"
 
-                    delegate: NavItem {
-                        required property var modelData
-                        glyph:       "▢"
-                        label:       modelData.name
-                        selected:    (sidebar.page === "grid") && (library.filter === 2) &&
-                                     (library.albumTagId === modelData.tagId)
-                        onActivated: {
-                            sidebar.page = "grid"
-                            library.showAlbum(modelData.tagId)
+                    Repeater {
+                        model: library.albums
+
+                        delegate: NavItem {
+                            required property var modelData
+                            glyph:       "▢"
+                            label:       modelData.name
+                            selected:    (sidebar.page === "grid") && (library.filter === 2) &&
+                                         (library.albumTagId === modelData.tagId)
+                            onActivated: {
+                                sidebar.page = "grid"
+                                library.showAlbum(modelData.tagId)
+                            }
                         }
                     }
-                }
 
-                Text {
-                    visible:          library.albums.length === 0
-                    Layout.fillWidth: true
-                    leftPadding:      6
-                    rightPadding:     6
-                    wrapMode:         Text.WordWrap
-                    text:             qsTr("Open a photo and use “Add to album” to create one.")
-                    color:            palette.windowText
-                    opacity:          0.5
-                    font.pixelSize:   12
+                    Text {
+                        visible:          library.albums.length === 0
+                        Layout.fillWidth: true
+                        leftPadding:      6
+                        rightPadding:     6
+                        wrapMode:         Text.WordWrap
+                        text:             qsTr("Open a photo and use “Add to album” to create one.")
+                        color:            palette.windowText
+                        opacity:          0.5
+                        font.pixelSize:   12
+                    }
                 }
 
                 // --- Library folders (digiKam's collections) ---------------------
 
                 SectionTitle {
+                    key:  "folders"
                     text: qsTr("Folders")
                 }
 
-                Repeater {
-                    model: libraries.folders
+                Section {
+                    key: "folders"
 
-                    delegate: NavItem {
-                        required property var modelData
+                    Repeater {
+                        model: libraries.folders
 
-                        glyph:       modelData.network ? "\u2601" : (modelData.removable ? "\u23CF" : "\u25A4")
-                        label:       modelData.name
-                        detail:      modelData.available ? "" : qsTr("not connected")
-                        opacity:     modelData.available ? 1.0 : 0.5
-                        selected:    (sidebar.page === "grid") && (library.filter === 13) &&
-                                     (library.folderPath === modelData.path)
-                        onActivated: {
-                            if (!modelData.available)
-                                return
+                        delegate: NavItem {
+                            required property var modelData
 
-                            sidebar.page = "grid"
-                            library.showFolder(modelData.path)
+                            glyph:       modelData.network ? "\u2601" : (modelData.removable ? "\u23CF" : "\u25A4")
+                            label:       modelData.name
+                            detail:      modelData.available ? "" : qsTr("not connected")
+                            opacity:     modelData.available ? 1.0 : 0.5
+                            selected:    (sidebar.page === "grid") && (library.filter === 13) &&
+                                         (library.folderPath === modelData.path)
+                            onActivated: {
+                                if (!modelData.available)
+                                    return
+
+                                sidebar.page = "grid"
+                                library.showFolder(modelData.path)
+                            }
                         }
                     }
                 }
@@ -239,51 +313,57 @@ Rectangle {
                 // --- Devices: named at import, or the cameras of the photos -----
 
                 SectionTitle {
+                    key:  "devices"
                     visible: (importer.devices.length + library.devices.length) > 0
                     text:    qsTr("Devices")
                 }
 
-                // Named at import (from the import records).
-                Repeater {
-                    model: importer.devices
+                Section {
+                    key: "devices"
+                    visible: !sidebar.isCollapsed(key) && (importer.devices.length + library.devices.length) > 0
 
-                    delegate: NavItem {
-                        required property var modelData
+                    // Named at import (from the import records).
+                    Repeater {
+                        model: importer.devices
 
-                        glyph:       "\u260E"
-                        label:       modelData.name
-                        detail:      Number(modelData.count).toLocaleString(Qt.locale(), "f", 0)
-                        selected:    (sidebar.page === "grid") && (library.filter === 4) &&
-                                     (library.filesKey === "device:" + modelData.name)
-                        onActivated: {
-                            sidebar.page = "grid"
-                            importer.showDevice(modelData.name)
+                        delegate: NavItem {
+                            required property var modelData
+
+                            glyph:       "\u260E"
+                            label:       modelData.name
+                            detail:      Number(modelData.count).toLocaleString(Qt.locale(), "f", 0)
+                            selected:    (sidebar.page === "grid") && (library.filter === 4) &&
+                                         (library.filesKey === "device:" + modelData.name)
+                            onActivated: {
+                                sidebar.page = "grid"
+                                importer.showDevice(modelData.name)
+                            }
                         }
                     }
-                }
 
-                // Device tags of earlier versions, and the cameras of the EXIF data.
-                Repeater {
-                    model: library.devices.filter((d) => (d.kind !== "tag") ||
-                                                         !importer.devices.some((n) => n.name === d.name))
+                    // Device tags of earlier versions, and the cameras of the EXIF data.
+                    Repeater {
+                        model: library.devices.filter((d) => (d.kind !== "tag") ||
+                                                             !importer.devices.some((n) => n.name === d.name))
 
-                    delegate: NavItem {
-                        required property var modelData
-                        readonly property bool named: modelData.kind === "tag"
+                        delegate: NavItem {
+                            required property var modelData
+                            readonly property bool named: modelData.kind === "tag"
 
-                        glyph:       named ? "\u260E" : "\u25CE"
-                        label:       modelData.name
-                        detail:      Number(modelData.count).toLocaleString(Qt.locale(), "f", 0)
-                        selected:    (sidebar.page === "grid") &&
-                                     (named ? ((library.filter === 5) && (library.albumTagId === modelData.tagId))
-                                            : ((library.filter === 6) && (library.title === modelData.name)))
-                        onActivated: {
-                            sidebar.page = "grid"
+                            glyph:       named ? "\u260E" : "\u25CE"
+                            label:       modelData.name
+                            detail:      Number(modelData.count).toLocaleString(Qt.locale(), "f", 0)
+                            selected:    (sidebar.page === "grid") &&
+                                         (named ? ((library.filter === 5) && (library.albumTagId === modelData.tagId))
+                                                : ((library.filter === 6) && (library.title === modelData.name)))
+                            onActivated: {
+                                sidebar.page = "grid"
 
-                            if (named)
-                                library.showDeviceTag(modelData.tagId)
-                            else
-                                library.showCamera(modelData.make, modelData.model)
+                                if (named)
+                                    library.showDeviceTag(modelData.tagId)
+                                else
+                                    library.showCamera(modelData.make, modelData.model)
+                            }
                         }
                     }
                 }
@@ -291,64 +371,75 @@ Rectangle {
                 // --- Media types ------------------------------------------------
 
                 SectionTitle {
+                    key:  "media"
                     text: qsTr("Media Types")
                 }
 
-                NavItem {
-                    glyph:       "▭"
-                    label:       qsTr("Screenshots")
-                    selected:    (sidebar.page === "grid") && (library.filter === 7)
-                    onActivated: sidebar.show(7)
-                }
+                Section {
+                    key: "media"
 
-                NavItem {
-                    glyph:       "◈"
-                    label:       qsTr("Selfies")
-                    selected:    (sidebar.page === "grid") && (library.filter === 10)
-                    onActivated: sidebar.show(10)
-                }
+                    NavItem {
+                        glyph:       "▭"
+                        label:       qsTr("Screenshots")
+                        selected:    (sidebar.page === "grid") && (library.filter === 7)
+                        onActivated: sidebar.show(7)
+                    }
 
-                NavItem {
-                    glyph:       "↔"
-                    label:       qsTr("Panoramas")
-                    selected:    (sidebar.page === "grid") && (library.filter === 9)
-                    onActivated: sidebar.show(9)
-                }
+                    NavItem {
+                        glyph:       "◈"
+                        label:       qsTr("Selfies")
+                        selected:    (sidebar.page === "grid") && (library.filter === 10)
+                        onActivated: sidebar.show(10)
+                    }
 
-                NavItem {
-                    glyph:       "R"
-                    label:       qsTr("RAW")
-                    selected:    (sidebar.page === "grid") && (library.filter === 8)
-                    onActivated: sidebar.show(8)
+                    NavItem {
+                        glyph:       "↔"
+                        label:       qsTr("Panoramas")
+                        selected:    (sidebar.page === "grid") && (library.filter === 9)
+                        onActivated: sidebar.show(9)
+                    }
+
+                    NavItem {
+                        glyph:       "R"
+                        label:       qsTr("RAW")
+                        selected:    (sidebar.page === "grid") && (library.filter === 8)
+                        onActivated: sidebar.show(8)
+                    }
                 }
 
                 // --- Library management -----------------------------------------
 
                 SectionTitle {
+                    key:  "utilities"
                     text: qsTr("Utilities")
                 }
 
-                NavItem {
-                    glyph:       "⤓"
-                    label:       qsTr("Imports")
-                    detail:      importer.history.length > 0 ? String(importer.history.length) : ""
-                    selected:    (sidebar.page === "imports") || ((sidebar.page === "grid") && (library.filter === 4))
-                    onActivated: sidebar.page = "imports"
+                Section {
+                    key: "utilities"
+
+                    NavItem {
+                        glyph:       "⤓"
+                        label:       qsTr("Imports")
+                        detail:      importer.history.length > 0 ? String(importer.history.length) : ""
+                        selected:    (sidebar.page === "imports") || ((sidebar.page === "grid") && (library.filter === 4))
+                        onActivated: sidebar.page = "imports"
+                    }
+
+                    NavItem {
+                        glyph:       "◌"
+                        label:       qsTr("Hidden")
+                        selected:    (sidebar.page === "grid") && (library.filter === 11)
+                        onActivated: sidebar.show(11)
+                    }
+
+                    NavItem {
+                        glyph:       "♲"
+                        label:       qsTr("Recently Deleted")
+                        selected:    (sidebar.page === "grid") && (library.filter === 12)
+                        onActivated: sidebar.show(12)
+                    }
                 }
 
-                NavItem {
-                    glyph:       "◌"
-                    label:       qsTr("Hidden")
-                    selected:    (sidebar.page === "grid") && (library.filter === 11)
-                    onActivated: sidebar.show(11)
-                }
-
-                NavItem {
-                    glyph:       "♲"
-                    label:       qsTr("Recently Deleted")
-                    selected:    (sidebar.page === "grid") && (library.filter === 12)
-                    onActivated: sidebar.show(12)
-                }
             }
         }
 

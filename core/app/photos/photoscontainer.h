@@ -66,6 +66,9 @@ class PhotosContainer : public QStackedWidget
     /// Writing database-only information to sidecars, in percent, or -1 when idle.
     Q_PROPERTY(int          sidecarSyncPercent READ sidecarSyncPercent NOTIFY signalSidecarSyncChanged)
 
+    /// Sidebar sections folded by the user (keys, saved setting).
+    Q_PROPERTY(QStringList  collapsedSections READ collapsedSections WRITE setCollapsedSections NOTIFY signalCollapsedSectionsChanged)
+
     /// Two or more fingers on the touch screen: lists stop scrolling, a pinch is going on.
     Q_PROPERTY(bool         multiTouch       READ multiTouch       NOTIFY signalMultiTouchChanged)
 
@@ -88,6 +91,8 @@ public:
     int          sidecarSyncPercent() const;
     bool         hideSidecars()     const;
     void         setHideSidecars(bool hide);
+    QStringList  collapsedSections() const;
+    void         setCollapsedSections(const QStringList& keys);
 
     // --- Helpers callable from QML ("photosApp") ---
 
@@ -123,6 +128,7 @@ Q_SIGNALS:
     void signalSidecarsChanged();
     void signalSidecarSyncChanged();
     void signalHideSidecarsChanged();
+    void signalCollapsedSectionsChanged();
 
     /// Touch screen pinch (see PhotosTouchPinch): scale relative to the start,
     /// center in scene coordinates.
@@ -165,6 +171,7 @@ private:
     PhotosLibraries*       m_libraries   = nullptr;
     PhotosInboxes*         m_inboxes     = nullptr;
     QStringList            m_pendingPaths;
+    QStringList            m_collapsedSections;
     bool                   m_windowReady = false;
     QAction*               m_toggle      = nullptr;
     QTimer*                m_pregenTimer = nullptr;

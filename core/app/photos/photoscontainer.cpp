@@ -125,6 +125,8 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
 
     m_filmstrip = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
                                              .readEntry("Filmstrip", true);
+    m_collapsedSections = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
+                                                     .readEntry("Collapsed Sidebar Sections", QStringList());
 
     m_quick   = new QQuickWidget(this);
     m_quick->setObjectName(QLatin1String("PhotosQuickWidget"));
@@ -401,6 +403,27 @@ QVariantList PhotosContainer::thumbnailSizes() const
 int PhotosContainer::preparingPercent() const
 {
     return m_preparingPercent;
+}
+
+QStringList PhotosContainer::collapsedSections() const
+{
+    return m_collapsedSections;
+}
+
+void PhotosContainer::setCollapsedSections(const QStringList& keys)
+{
+    if (keys == m_collapsedSections)
+    {
+        return;
+    }
+
+    m_collapsedSections = keys;
+
+    KConfigGroup group = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
+    group.writeEntry("Collapsed Sidebar Sections", keys);
+    group.sync();
+
+    Q_EMIT signalCollapsedSectionsChanged();
 }
 
 bool PhotosContainer::filmstrip() const
