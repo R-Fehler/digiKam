@@ -23,6 +23,7 @@ if(Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickWidgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/photos/photosinboxes.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/photos/photossynchealth.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/photos/photosmover.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/photos/photosshellintegration.cpp
     )
 
     qt_add_resources(photosmode_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/photos/photos.qrc)

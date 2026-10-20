@@ -180,6 +180,31 @@ Popup {
                        + "Opening a folder (\u201Cdigikam --photos <folder>\u201D) adds it too.")
         }
 
+        // --- File managers ------------------------------------------------------------
+
+        Heading {
+            text: qsTr("File managers")
+        }
+
+        Switch {
+            visible:   photosApp.fileManagerMenuSupported
+            text:      qsTr("Show \u201COpen in Photos\u201D when right-clicking a folder or photo")
+            checked:   photosApp.fileManagerMenu
+            onToggled: photosApp.fileManagerMenu = checked
+        }
+
+        Note {
+            text: (Qt.platform.os === "windows")
+                  ? qsTr("In Explorer, for folders, photos and videos. On Windows 11 it is under \u201CShow more options\u201D. "
+                         + "Only for you; nothing needs administrator rights.")
+                  : (Qt.platform.os === "osx")
+                    ? qsTr("In Finder, right-click a folder, photo or video and choose Open With \u2192 digiKam, "
+                           + "or drop it on digiKam in the Dock.")
+                    : qsTr("In Dolphin, Nemo and the \u201COpen With\u201D menu of every file manager; under "
+                           + "\u201CScripts\u201D in GNOME Files and Caja. Only for you. From a terminal: "
+                           + "\u201Cdigikam --photos <folder>\u201D.")
+        }
+
         // --- Inboxes ---------------------------------------------------------------------
 
         Heading {

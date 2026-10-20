@@ -56,6 +56,7 @@
 #include "photosinboxes.h"
 #include "photossynchealth.h"
 #include "photosmover.h"
+#include "photosshellintegration.h"
 #include "photosmode.h"
 #include "metaenginesettings.h"
 #include "metaenginesettingscontainer.h"
@@ -139,6 +140,17 @@ PhotosContainer::PhotosContainer(DigikamApp* const app, ItemIconView* const clas
 
     m_filmstrip = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
                                              .readEntry("Filmstrip", true);
+    // "Open in Photos" in file managers: the program may have moved (a new
+    // AppImage, another install folder) since it was installed.
+
+    if (
+        PhotosShellIntegration::isSupported() &&
+        KSharedConfig::openConfig()->group(QLatin1String("Photos Mode")).readEntry("File Manager Menu", false)
+       )
+    {
+        PhotosShellIntegration::install();
+    }
+
     m_collapsedSections = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"))
                                                      .readEntry("Collapsed Sidebar Sections", QStringList());
 
@@ -418,6 +430,34 @@ QVariantList PhotosContainer::thumbnailSizes() const
 int PhotosContainer::preparingPercent() const
 {
     return m_preparingPercent;
+}
+
+bool PhotosContainer::fileManagerMenu() const
+{
+    return PhotosShellIntegration::isInstalled();
+}
+
+bool PhotosContainer::fileManagerMenuSupported() const
+{
+    return PhotosShellIntegration::isSupported();
+}
+
+void PhotosContainer::setFileManagerMenu(bool on)
+{
+    if (on)
+    {
+        PhotosShellIntegration::install();
+    }
+    else
+    {
+        PhotosShellIntegration::uninstall();
+    }
+
+    KConfigGroup group = KSharedConfig::openConfig()->group(QLatin1String("Photos Mode"));
+    group.writeEntry("File Manager Menu", on);
+    group.sync();
+
+    Q_EMIT signalFileManagerMenuChanged();
 }
 
 QStringList PhotosContainer::collapsedSections() const

@@ -57,6 +57,35 @@
 	<array>
 		<string>x86_64</string>
 	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<!-- Finder "Open With", and drops on the Dock icon: opened in Photos mode. -->
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Photo or video</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.image</string>
+				<string>public.movie</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSEnvironment</key>
 	<dict>
 		<key>RasterOff</key>

@@ -67,6 +67,10 @@ class PhotosContainer : public QStackedWidget
     /// Writing database-only information to sidecars, in percent, or -1 when idle.
     Q_PROPERTY(int          sidecarSyncPercent READ sidecarSyncPercent NOTIFY signalSidecarSyncChanged)
 
+    /// "Open in Photos" in the context menu of file managers (see photosshellintegration.h).
+    Q_PROPERTY(bool         fileManagerMenu  READ fileManagerMenu  WRITE setFileManagerMenu NOTIFY signalFileManagerMenuChanged)
+    Q_PROPERTY(bool         fileManagerMenuSupported READ fileManagerMenuSupported CONSTANT)
+
     /// Sidebar sections folded by the user (keys, saved setting).
     Q_PROPERTY(QStringList  collapsedSections READ collapsedSections WRITE setCollapsedSections NOTIFY signalCollapsedSectionsChanged)
 
@@ -92,6 +96,9 @@ public:
     int          sidecarSyncPercent() const;
     bool         hideSidecars()     const;
     void         setHideSidecars(bool hide);
+    bool         fileManagerMenu()  const;
+    void         setFileManagerMenu(bool on);
+    bool         fileManagerMenuSupported() const;
     QStringList  collapsedSections() const;
     void         setCollapsedSections(const QStringList& keys);
 
@@ -130,6 +137,7 @@ Q_SIGNALS:
     void signalSidecarSyncChanged();
     void signalHideSidecarsChanged();
     void signalCollapsedSectionsChanged();
+    void signalFileManagerMenuChanged();
 
     /// Touch screen pinch (see PhotosTouchPinch): scale relative to the start,
     /// center in scene coordinates.

@@ -475,9 +475,19 @@ PhotosImporter::DeviceCount countDeviceFiles(const QHash<QString, QStringList>& 
     for (auto it = deviceFiles.constBegin() ; it != deviceFiles.constEnd() ; ++it)
     {
         int count = 0;
+        QSet<QString> seen;
 
         for (const QString& path : it.value())
         {
+            // A file can be listed twice: imported here, moved away and back.
+
+            if (seen.contains(path))
+            {
+                continue;
+            }
+
+            seen.insert(path);
+
             if (QFileInfo::exists(path))
             {
                 result.deviceOfPath.insert(path, it.key());
