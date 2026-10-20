@@ -59,6 +59,30 @@ A toast says "12 new photos from Anna's iPhone · Show". Imports lists the impor
 - An inbox inside a library folder (`Photos/Inbox/…`) is the same on every computer, and digiKam does not index it.
 - An inbox elsewhere is located once per computer with **Locate…**.
 
+## Personal and Shared libraries
+
+![Personal and Shared](img/personal-shared.jpg)
+
+As in Apple Photos with iCloud Shared Library, each person keeps a personal library next to the shared one, using library folders:
+
+- **Shared folders.** A library folder is shared when it is on a network share or in a folder of a sync tool. Settings → Library folders has a **Shared** switch per folder to set it either way. The choice is stored in `<folder>/.photos-imports/library.json`, which syncs with the folder, so every computer agrees.
+- **The switcher.** With folders of both kinds, the top of the sidebar shows **Both · Personal · Shared**.
+  - Every view follows it: Library, Favorites, Albums, Devices, media types, Hidden and Recently Deleted.
+  - Folder views always show their folder.
+  - The choice is kept per computer.
+- **Moving.** Selected photos get **Move to Shared**, or **Move to Personal** when they are all shared.
+  - They go to the same place in the other library: `2024/05/IMG_0001.HEIC`, into the import folder if it is of that kind, else the first folder of that kind.
+  - Their sidecars and the video of a Live Photo go with them.
+  - On the same drive a file is renamed. Otherwise it is copied under a hidden name, checked by size, and then removed where it was.
+  - The database entry moves with the file (`CoreDB::moveItem`, as digiKam's own move does), so albums, favorites, captions and people stay, even without sidecars.
+  - The device the photos were imported from stays: a record of the move in the target folder.
+
+Tested in the container, with `~/Pictures` (personal) and a folder with a `.stfolder` (Syncthing, so shared):
+- the switcher filtered every view;
+- two favorites of Ben's Pixel, one of them a video, were moved to Shared and back;
+- they stayed favorites, kept their sidecars and stayed under Ben's Pixel;
+- after a restart the device still counted 11 photos.
+
 ## What each computer does by itself
 
 - **Database location.** If the database is inside a library folder, on a network share, or in a folder of a sync tool (recognized: Syncthing, Dropbox, Nextcloud/ownCloud, Resilio Sync, Google Drive, OneDrive, iCloud Drive), a banner offers to move it to this computer.
@@ -105,7 +129,6 @@ Not tested here:
 
 ## Not done yet
 
-- **Personal and shared libraries.** Apple's "Both / Personal / Shared" switcher, and "Move to Shared". This maps onto library folders: a local Personal folder next to the synced Shared folder.
 - **Headless inbox import on the NAS.** For example `digikam --photos --import-inboxes` run on a schedule in a container, when neither computer is on.
-- **"Safe to delete from the phone up to <date>"** per device.
+- **Automatic sharing rules** (Apple's "share photos taken with these people / at home").
 - **Per-person favorites.** Favorites are shared, as in Apple's iCloud Shared Library.

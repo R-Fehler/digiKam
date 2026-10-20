@@ -209,12 +209,10 @@ These are only indicative: there was no GPU and the CPU was shared with the buil
 1. **Sharing and export** of selected photos: copy to a folder, email, and the existing export plugins.
    Import, sidecars, devices, library views, video and the info panel are in `05-files-import-and-views.md`.
 2. **Touch testing** on a real touch screen and touchpad (implemented and tested with simulated events only).
-4. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
-5. **Import sheet** for phones and cards, with automatic `YYYY/MM` folders.
-6. **People and Places** views using the existing face tags and GPS data.
-7. **Inline edit mode** with the about 8 consumer tools listed in the audit.
-8. **Videos.** Inline playback; currently the system player is used.
-9. **Dev runner limitation.** `run-dev.sh` stages the data files but not the classic XMLGUI menu files. When running from the build tree, the classic interface therefore shows only Settings/Help menus. An installed build (`ninja install`) is complete.
+3. **First run.** Replace the 9-page wizard with a single "Where are your photos?" page when started with `--photos`.
+4. **People and Places** views using the existing face tags and GPS data.
+5. **Inline edit mode** with the about 8 consumer tools listed in the audit.
+6. **Dev runner limitation.** `run-dev.sh` stages the data files but not the classic XMLGUI menu files. When running from the build tree, the classic interface therefore shows only Settings/Help menus. An installed build (`ninja install`) is complete.
 
 ## Footprint in stock digiKam files
 
@@ -227,5 +225,6 @@ All of the new code is in `core/app/photos/`. The changes to stock files are:
 | `core/app/main/digikamapp.cpp` | `PhotosMode::finalizeMainWindow()` |
 | `core/app/main/digikamapp_p.h` | include |
 | `core/app/DigikamGuiTarget.cmake` | include `photos/PhotosMode.cmake` |
+| `core/cmake/templates/DigikamInfo.plist.cmake.in` | macOS: folders, images and movies as document types (Alternate rank), for Finder's "Open With" and drops on the Dock icon |
 
 Every hook is behind `#ifdef HAVE_PHOTOSMODE`, which is only defined when Qt Quick is found.

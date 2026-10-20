@@ -62,14 +62,15 @@ All tests ran in the test container.
    - **Choose a folder…** covers everything else: a folder or drive, or a phone shown by the file manager. The list refreshes while the sheet is open.
 2. **Summary.**
    - It shows the number of new photos and videos and their date range, and how many are **already in the library**. Those are skipped: same digiKam file hash (`uniqueHash`) and size as a visible item, or the same file twice in the source. Importing the same phone again therefore brings only the new photos.
-   - The device name is suggested from the camera of most new photos ("iPhone 15 Pro") and can be changed ("Anna's iPhone").
+   - The device name is the one given at the last import from the same place (the same phone, card or folder). Otherwise it is suggested from the camera of most new photos ("iPhone 15 Pro"). It can be changed ("Anna's iPhone").
+   - When nothing is new, the sheet says so: everything there is in the library and can be deleted from the device.
 3. **Import.**
    - New files go into `<import folder>/YYYY/MM/`, by capture date (EXIF, video metadata, otherwise the file date), oldest first.
    - XMP sidecars from the source come along.
    - Each file is copied under a hidden temporary name and then renamed, so scans and folder monitoring never see a partial file. The file date is kept.
    - Each file is added to the database right away (`ScanController::scannedInfo`).
    - The device name is kept in the import record, not written to the photos: importing creates no sidecars.
-4. **Done.** The sheet offers **Show** for the photos of this import. A cancelled import keeps what was copied and is recorded.
+4. **Done.** The sheet says what can now be deleted from the device (below), and offers **Show** for the photos of this import. A cancelled import keeps what was copied and is recorded.
 
 The import folder is one of digiKam's collections (Settings → Import into); collections themselves are managed in the classic interface.
 
@@ -84,6 +85,20 @@ The import folder is one of digiKam's collections (Settings → Import into); co
 
 The records are small JSON files in `<library folder>/.photos-imports/`. They are synced with the library, so every computer sees the full history. digiKam does not scan hidden folders.
 
+### What can be deleted from the phone
+
+![Device view: what can be deleted](img/device-safe.jpg)
+
+Each import records whether everything on the device is now in the library:
+- **Everything was imported**, or was there already: "Everything that was on Ben's Pixel today at 19:55 is in the library. You can delete those photos and videos from it."
+- **Some files were not imported** (a copy failed, or Stop): only the photos taken before the first of them are safe. "Photos and videos taken before 1 March 2019 at 09:00 are in the library: you can delete those from Ben's Pixel. Keep the newer ones until they are imported."
+- **Nothing new** on a device imported before: recorded as a check in `.photos-imports/devices.json`.
+- **Inbox imports:** "Everything Anna's iPhone sent up to … is in the library". An inbox only holds what the phone sent.
+
+The newest check of a device is shown in the sheet when it finishes, and in a green (or amber) line above the device's view. Undone imports do not count. The records sync with the library, so every computer shows the same answer.
+
+Photos mode does not delete anything from the phone itself.
+
 ## Devices: whose phone
 
 The sidebar lists:
@@ -91,7 +106,7 @@ The sidebar lists:
 - **named devices**: the device names given at import ("Anna's iPhone", "Ben's phone"). These tell apart phones of the same model, which EXIF alone cannot. They come from the import records, which sync with the library, so every computer has them. A photo moved or renamed outside Photos mode leaves its device. `Devices/<name>` tags written by an earlier preview are still listed, merged by name;
 - **cameras**: every camera make and model found in EXIF ("iPhone 15 Pro", "Samsung SM-S918B"), also for photos that were never imported through Photos mode.
 
-Each entry shows its number of photos, and devices without photos are not listed. Make and model are made readable: "Apple" + "iPhone 15 Pro" becomes "iPhone 15 Pro", and "samsung" + "SM-S918B" becomes "Samsung SM-S918B".
+Each entry shows its number of photos, and devices without photos are not listed. Photos moved between the personal and the shared library keep their device (a record of the move in the target folder). Make and model are made readable: "Apple" + "iPhone 15 Pro" becomes "iPhone 15 Pro", and "samsung" + "SM-S918B" becomes "Samsung SM-S918B".
 
 ## Library views
 
@@ -196,17 +211,30 @@ Tested in the container:
 - a photo given at a cold start, opened in the viewer;
 - removing a folder: database entries gone, files untouched.
 
-### File manager integration (planned)
+### "Open in Photos" in file managers
 
-These all call the command above.
+Settings → File managers → **Show "Open in Photos" when right-clicking a folder or photo**. It installs entries for the current user only, with no administrator rights, and switching it off removes them. All of them run `<digikam> --photos <path>`, which hands the path to the running window.
 
-| Platform | How | Notes |
+| Platform | What is installed | Where it shows |
 |---|---|---|
-| Linux, all desktops | A `.desktop` entry with `MimeType=inode/directory;image/*;video/*` and `Exec=... --photos %U` | Shows up in "Open With". AppImages need an "install desktop integration" step that writes the entry with the AppImage path, as AppImageLauncher does. |
-| KDE Dolphin | Service menu in `~/.local/share/kio/servicemenus/` ("Open in Photos") | Right-click on a folder or photos |
-| GNOME Files, Nemo | `.desktop` "Open With", or a Nautilus script or extension | |
-| Windows | Registry, per user: `HKCU\Software\Classes\Directory\shell\…` (`"%1"`), `Directory\Background\shell\…` (`"%V"`), `SystemFileAssociations\image\shell\…` | Written by the installer behind a checkbox, as VS Code does. On Windows 11 they appear under "Show more options"; the top-level menu needs a packaged `IExplorerCommand` extension. |
-| macOS | `CFBundleDocumentTypes` with `public.folder` in Info.plist (open, Dock drop), and a Finder Quick Action ("Open in Photos") | The Quick Action can ship as a `.workflow` that runs `open -a`. A Finder Sync extension needs a signed app. |
+| Windows | Explorer verbs under `HKCU\Software\Classes`: `Directory\shell` (`"%1"`), `Directory\Background\shell` (`"%V"`), `SystemFileAssociations\image\shell` and `…\video\shell` | Right-click on a folder, inside a folder, on photos and videos. Windows 11: under "Show more options" (the top-level menu needs a packaged `IExplorerCommand` extension). |
+| Linux: Dolphin | `~/.local/share/kio/servicemenus/org.kde.digikam.photos-open.desktop` (executable, as KF6 asks) | Right-click on folders, photos and videos |
+| Linux: Nemo | `~/.local/share/nemo/actions/org.kde.digikam.photos.nemo_action` | Right-click |
+| Linux: GNOME Files, Caja | A script in `~/.local/share/nautilus/scripts/` and `~/.config/caja/scripts/` | Right-click → Scripts → Open in Photos. With nothing selected, the folder shown. |
+| Linux: every file manager | `~/.local/share/applications/org.kde.digikam.photos.desktop` | "Open With" (Thunar, PCManFM, …) |
+| macOS | Nothing to switch on: the app declares folders, images and movies as document types (Alternate rank, so it never becomes the default app) | Right-click → Open With → digiKam, and drops on the Dock icon |
+
+Details:
+- The Dolphin, Nemo, Nautilus and Caja entries are written only when that file manager is installed.
+- **AppImage:** the entries start the AppImage itself (`$APPIMAGE`), not the program inside its temporary mount.
+- **Moved program:** while the setting is on, the entries are rewritten at each start, so a moved AppImage or a new install folder keeps working.
+- **Not done:** a macOS Finder Quick Action, which needs a `.workflow` bundle, and Thunar's custom actions, which live in `uca.xml`.
+
+Tested in the container (Linux):
+- the files were written with the build's path, and removed when the setting was switched off;
+- the Nautilus script, run with a relative folder name, showed that folder in the running window.
+
+The Windows and macOS parts are built in CI, not run.
 
 ## Sidecars: visibility and other applications
 
@@ -254,7 +282,7 @@ Tested in the container:
 ## Known gaps
 
 - **Phones on Windows and macOS.** They are not mounted as folders: an iPhone appears as an MTP or Apple device, not a drive. A phone sync app (PhotoSync, Syncthing, Nextcloud, OneDrive) can put the photos in a folder, which is then imported or set as the import source. digiKam's gphoto2 camera import could reach them on Linux and macOS, and is not wired to Photos mode yet.
-- **"Delete from the phone after import"** is not offered yet.
+- **"Delete from the phone after import"** is not offered: Photos mode says what can be deleted, and the phone's own app deletes it.
 - **Counts.** Device counts include the videos of Live Photos.
 - **Import views list Live Photo videos.** The view of an import or of a device lists every imported file, including the video of a Live Photo.
 - **Videos written while scanned.** A video still being written when folder monitoring scans it, for example one recorded straight into the library, gets no duration and size until it changes again. Imports are not affected: they copy under a temporary name.
