@@ -10,6 +10,7 @@
 //   double click          open the photo
 //   right click           context menu
 //   Ctrl + wheel / pinch  zoom (number of columns)
+//   touchpad scroll       keeps going when the fingers leave (wheelFling())
 //
 // Touch screens (handled separately, the mouse overlay ignores touch):
 //   finger drag           scroll (flick)
@@ -236,6 +237,34 @@ FocusScope {
         }
     }
 
+    // --- Touchpad momentum (see PhotosWheelMomentum) ---------------------------
+    // The list's own last speed while the fingers moved (Qt resets it when they
+    // leave), so the fling continues exactly as fast as the scrolling was.
+
+    property real wheelVelocity:     0
+    property real wheelVelocityTime: 0
+
+    readonly property real touchDeceleration: 4000
+    readonly property real wheelDeceleration: 2500
+
+    /// The fingers left the touchpad while scrolling: keep going (x, y: scene).
+    function wheelFling(vx, vy, x, y) {
+        const p = list.mapFromItem(null, x, y)
+
+        if (!visible || !list.contains(p))
+            return
+
+        const v = ((Date.now() - wheelVelocityTime) < 150) ? -wheelVelocity : vy
+
+        list.flickDeceleration = wheelDeceleration
+        list.flick(0, v)
+    }
+
+    function stopFling() {
+        if (list.flicking)
+            list.cancelFlick()
+    }
+
     // --- Grid -----------------------------------------------------------------
 
     ListView {
@@ -256,9 +285,20 @@ FocusScope {
         interactive:           !gridRoot.touchSelecting && !photosApp.multiTouch
 
         boundsBehavior:        Flickable.StopAtBounds
-        flickDeceleration:     4000
+        flickDeceleration:     gridRoot.touchDeceleration
         maximumFlickVelocity:  8000
         pixelAligned:          true
+
+        // Touch flicks stop sooner than touchpad momentum.
+        onDraggingChanged:     if (dragging) flickDeceleration = gridRoot.touchDeceleration
+        onMovementEnded:       flickDeceleration = gridRoot.touchDeceleration
+
+        onVerticalVelocityChanged: {
+            if ((verticalVelocity !== 0) && !flicking) {
+                gridRoot.wheelVelocity     = verticalVelocity
+                gridRoot.wheelVelocityTime = Date.now()
+            }
+        }
 
         transform: Scale {
             id: zoomScale

@@ -13,8 +13,11 @@
 
 // Qt includes
 
+#include <QElapsedTimer>
 #include <QEvent>
 #include <QLineF>
+#include <QList>
+#include <QWheelEvent>
 #include <QQuickWidget>
 #include <QQuickWindow>
 #include <QNativeGestureEvent>
@@ -239,6 +242,168 @@ private:
     qreal           m_start  = 1.0;
     qreal           m_scale  = 1.0;
     QPointF         m_center;
+};
+
+/**
+ * Touchpad scrolling keeps going after the fingers leave the touchpad
+ * (momentum, "kinetic" scrolling), as on a phone.
+ *
+ * macOS adds momentum itself (Qt::ScrollMomentum events). On Wayland, the
+ * compositor only reports when the fingers left (Qt::ScrollEnd) and the
+ * application continues the movement, as GTK does; Qt Quick's Flickable
+ * stops dead instead. This tells when to continue: at the end of a touchpad
+ * scroll whose fingers were still moving when they left, without momentum
+ * from the system. Not for wheels of mice (no scroll phases), nor X11 and
+ * Windows, whose events have no end.
+ *
+ * Feed it the wheel events of the scene (from an event filter): it only
+ * observes them.
+ */
+class PhotosWheelMomentum
+{
+public:
+
+    enum Action
+    {
+        None  = 0,
+        Stop  = 1,      ///< fingers on the touchpad again: stop a running fling
+        Fling = 2       ///< continue with velocity (pixels/s, in the direction of pixelDelta)
+    };
+
+    struct Step
+    {
+        Action  action = None;
+        QPointF velocity;
+        QPointF position;           ///< where, in the coordinates of the event
+    };
+
+    /// Samples older than this before the end are not used for the velocity.
+    static constexpr qint64 s_windowMs    = 100;
+
+    /// Fingers resting longer than this before leaving: no fling.
+    static constexpr qint64 s_liftGapMs   = 80;
+
+    /// Slower than this (pixels/s): no fling.
+    static constexpr qreal  s_minVelocity = 150.0;
+
+    PhotosWheelMomentum()
+    {
+        m_clock.start();
+    }
+
+    Step handle(const QEvent* const event)
+    {
+        Step step;
+
+        if (event->type() != QEvent::Wheel)
+        {
+            return step;
+        }
+
+        const QWheelEvent* const wheel = static_cast<const QWheelEvent*>(event);
+        const qint64 time              = wheel->timestamp() ? qint64(wheel->timestamp()) : m_clock.elapsed();
+
+        if (wheel->modifiers() & Qt::ControlModifier)
+        {
+            reset();            // Ctrl: zoom, not scrolling
+
+            return step;
+        }
+
+        switch (wheel->phase())
+        {
+            case Qt::ScrollBegin:
+            {
+                reset();
+                m_active    = true;
+                step.action = Stop;
+                break;
+            }
+
+            case Qt::ScrollUpdate:
+            {
+                if (m_active && !wheel->pixelDelta().isNull())
+                {
+                    m_samples << Sample { time, QPointF(wheel->pixelDelta()) };
+
+                    while ((m_samples.size() > 2) && ((time - m_samples.constFirst().time) > s_windowMs))
+                    {
+                        m_samples.removeFirst();
+                    }
+                }
+
+                break;
+            }
+
+            case Qt::ScrollMomentum:
+            {
+                m_systemMomentum = true;
+                break;
+            }
+
+            case Qt::ScrollEnd:
+            {
+                if (
+                    m_active && !m_systemMomentum && (m_samples.size() >= 2) &&
+                    ((time - m_samples.constLast().time) <= s_liftGapMs)
+                   )
+                {
+                    const qint64 span = m_samples.constLast().time - m_samples.constFirst().time;
+                    QPointF distance;
+
+                    for (int i = 1 ; i < m_samples.size() ; ++i)
+                    {
+                        distance += m_samples.at(i).delta;
+                    }
+
+                    if (span > 0)
+                    {
+                        const QPointF velocity = distance * 1000.0 / qreal(span);
+
+                        if (qMax(qAbs(velocity.x()), qAbs(velocity.y())) >= s_minVelocity)
+                        {
+                            step.action   = Fling;
+                            step.velocity = velocity;
+                            step.position = wheel->position();
+                        }
+                    }
+                }
+
+                reset();
+                break;
+            }
+
+            default:
+            {
+                reset();        // a mouse wheel
+                break;
+            }
+        }
+
+        return step;
+    }
+
+private:
+
+    void reset()
+    {
+        m_samples.clear();
+        m_active         = false;
+        m_systemMomentum = false;
+    }
+
+private:
+
+    struct Sample
+    {
+        qint64  time;
+        QPointF delta;
+    };
+
+    QList<Sample> m_samples;
+    QElapsedTimer m_clock;
+    bool          m_active         = false;
+    bool          m_systemMomentum = false;
 };
 
 } // namespace Digikam

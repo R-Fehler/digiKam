@@ -28,6 +28,28 @@ Item {
             list.currentIndex = currentIndex
     }
 
+    // Touchpad momentum (see PhotosWheelMomentum): the strip's own last speed
+    // while the fingers moved, which Qt resets when they leave.
+    property real wheelVelocity:     0
+    property real wheelVelocityTime: 0
+
+    /// The fingers left the touchpad while scrolling over the strip: keep going.
+    function wheelFling(vx, vy, x, y) {
+        const p = list.mapFromItem(null, x, y)
+
+        if (!visible || !list.contains(p))
+            return
+
+        const recent = (Date.now() - wheelVelocityTime) < 150
+
+        list.flick(recent ? -wheelVelocity : ((Math.abs(vx) >= Math.abs(vy)) ? vx : vy), 0)
+    }
+
+    function stopFling() {
+        if (list.flicking)
+            list.cancelFlick()
+    }
+
     // Opening the viewer: jump there, no animation.
     function center() {
         list.currentIndex = currentIndex
@@ -73,6 +95,13 @@ Item {
 
         onMovementStarted: userMoving = true
         onMovementEnded:   userMoving = false
+
+        onHorizontalVelocityChanged: {
+            if ((horizontalVelocity !== 0) && !flicking) {
+                strip.wheelVelocity     = horizontalVelocity
+                strip.wheelVelocityTime = Date.now()
+            }
+        }
 
         onCurrentIndexChanged: {
             if (userMoving && (currentIndex !== strip.currentIndex))

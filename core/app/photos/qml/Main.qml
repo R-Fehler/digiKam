@@ -538,6 +538,19 @@ Rectangle {
     Connections {
         target: photosApp
 
+        // Touchpad momentum (see PhotosWheelMomentum): the list under the fingers.
+        function onWheelFling(vx, vy, x, y) {
+            if (viewer.visible)
+                viewer.wheelFling(vx, vy, x, y)
+            else if (!root.importsPage)
+                photoGrid.wheelFling(vx, vy, x, y)
+        }
+
+        function onWheelFlingStop() {
+            viewer.stopFling()
+            photoGrid.stopFling()
+        }
+
         function onConflictsMerged(count) {
             toast.show((count === 1) ? qsTr("Merged the changes of another computer into 1 photo (sync conflict)")
                                      : qsTr("Merged the changes of other computers into %L1 photos (sync conflicts)").arg(count))

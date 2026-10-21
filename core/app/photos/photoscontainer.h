@@ -145,6 +145,14 @@ Q_SIGNALS:
     void touchPinchUpdated(qreal scale, qreal x, qreal y);
     void touchPinchFinished();
 
+    /// Touchpad scrolling ended with the fingers moving (see PhotosWheelMomentum):
+    /// the list under x, y (scene coordinates) keeps going. Velocity in pixels/s,
+    /// in the direction of the scroll deltas.
+    void wheelFling(qreal vx, qreal vy, qreal x, qreal y);
+
+    /// Fingers on the touchpad again: running flings stop.
+    void wheelFlingStop();
+
     /// Sync conflict copies of sidecars merged (see PhotosSyncHealth).
     void conflictsMerged(int count);
 
@@ -191,6 +199,7 @@ private:
     bool                   m_filmstrip         = true;
     bool                   m_deliveringTouch   = false;
     PhotosTouchPinch       m_touchPinch;
+    PhotosWheelMomentum    m_wheelMomentum;
 };
 
 } // namespace Digikam

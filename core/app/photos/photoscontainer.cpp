@@ -556,6 +556,28 @@ bool PhotosContainer::eventFilter(QObject* watched, QEvent* event)
         return true;
     }
 
+    // Touchpad momentum: the events still reach the scene, which scrolls.
+
+    if ((watched == m_quick) && (event->type() == QEvent::Wheel))
+    {
+        const PhotosWheelMomentum::Step step = m_wheelMomentum.handle(event);
+
+        if      (step.action == PhotosWheelMomentum::Stop)
+        {
+            Q_EMIT wheelFlingStop();
+        }
+        else if (step.action == PhotosWheelMomentum::Fling)
+        {
+            // After the scene handled this last event.
+
+            QTimer::singleShot(0, this, [this, step] ()
+                {
+                    Q_EMIT wheelFling(step.velocity.x(), step.velocity.y(), step.position.x(), step.position.y());
+                }
+            );
+        }
+    }
+
     // Touch screen pinch: see photosTouchPointCount(), PhotosTouchPinch and
     // photosDeliverTouch(). The events still reach the Qt Quick scene (taps,
     // scrolling...).

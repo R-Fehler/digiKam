@@ -124,6 +124,10 @@ jobs:
           g++ -std=c++17 -fPIC -I core/app/photos streamline/tests/gesture_test.cpp \
               $(pkg-config --cflags --libs Qt6QuickWidgets Qt6Quick Qt6Test Qt6Widgets) -o gesture_test
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./gesture_test
+          # Touchpad momentum scrolling (grid, thumbnail strip).
+          g++ -std=c++17 -fPIC -I core/app/photos streamline/tests/momentum_test.cpp \
+              $(pkg-config --cflags --libs Qt6QuickWidgets Qt6Quick Qt6Test Qt6Widgets) -o momentum_test
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./momentum_test
 
       - name: Package AppImage
         env:

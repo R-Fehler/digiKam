@@ -46,6 +46,15 @@ FocusScope {
     readonly property url  liveUrl:     (library.revision >= 0) ? library.liveUrlAt(index) : ""
     property bool          livePlaying: false
 
+    // Touchpad momentum over the thumbnail strip (see Main.qml).
+    function wheelFling(vx, vy, x, y) {
+        filmstrip.wheelFling(vx, vy, x, y)
+    }
+
+    function stopFling() {
+        filmstrip.stopFling()
+    }
+
     function formatTime(ms) {
         const s = Math.floor(Math.max(0, ms) / 1000)
         const m = Math.floor(s / 60)

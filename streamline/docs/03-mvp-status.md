@@ -170,6 +170,29 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./gesture_test
 
 **Not tested** on a real touchpad or touch screen yet. The events are simulated.
 
+### Touchpad momentum
+
+Touchpad scrolling in the grid and in the viewer's strip of thumbnails keeps going after the fingers leave the touchpad, and slows down as on a phone. Touching the touchpad again stops it.
+
+- **Why it was missing.** On Wayland the compositor only reports that the fingers left (`Qt::ScrollEnd`): applications continue the movement themselves, as GTK does. Qt Quick's `Flickable` stopped dead instead.
+- **How.** `PhotosWheelMomentum` (`photosgestures.h`) watches the wheel events of the scene. At the end of a touchpad scroll whose fingers were still moving, the list under the fingers flicks on, at its own last speed.
+  - No fling when the fingers rested (more than 80 ms) before leaving, or when scrolling slower than 150 px/s.
+  - None for Ctrl + scroll (zoom), nor for mouse wheels, which have no scroll phases.
+- **Platforms.**
+  - **macOS:** the system adds momentum itself (`Qt::ScrollMomentum`), so nothing is added.
+  - **X11:** the events have no end, so there is no momentum.
+  - **Windows:** precision touchpads add their own.
+- **Feel.** Touchpad momentum slows down more gently than a touch flick: a deceleration of 2500 px/s², against 4000 for touch.
+
+`streamline/tests/momentum_test.cpp` runs in CI. It covers:
+- scrolling down and up;
+- stopping when the fingers touch the touchpad again;
+- fingers that rested before leaving;
+- slow scrolling, Ctrl + scroll, macOS momentum and mouse wheels;
+- the horizontal strip, which also snaps to a photo.
+
+As with pinch, the events are simulated: not yet tried on a real touchpad.
+
 ### Full screen speed
 
 - **Preview loader.** Previews sized to the screen are decoded on their own small thread pool. That is half the cores, from 2 to 4; override with `DIGIKAM_PHOTOS_PREVIEW_THREADS`. Decoding uses digiKam's fast path: the embedded preview of RAW and JPEG files when it is large enough.
